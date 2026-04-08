@@ -1,0 +1,6 @@
+@Printuesi.Server_HostAddress = http://localhost:5226
+
+GET {{Printuesi.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

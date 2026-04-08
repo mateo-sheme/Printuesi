@@ -1,0 +1,33 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37111.16 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "printuesi.client", "printuesi.client\printuesi.client.esproj", "{EA665EA3-9CA9-EC95-9C38-C056703598FE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Printuesi.Server", "Printuesi.Server\Printuesi.Server.csproj", "{3C3AC6C1-DF08-4CAB-A6D1-22C0FE291B66}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EA665EA3-9CA9-EC95-9C38-C056703598FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA665EA3-9CA9-EC95-9C38-C056703598FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA665EA3-9CA9-EC95-9C38-C056703598FE}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{EA665EA3-9CA9-EC95-9C38-C056703598FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA665EA3-9CA9-EC95-9C38-C056703598FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA665EA3-9CA9-EC95-9C38-C056703598FE}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{3C3AC6C1-DF08-4CAB-A6D1-22C0FE291B66}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C3AC6C1-DF08-4CAB-A6D1-22C0FE291B66}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C3AC6C1-DF08-4CAB-A6D1-22C0FE291B66}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C3AC6C1-DF08-4CAB-A6D1-22C0FE291B66}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A86A617F-BF79-4DA0-8205-C4FE787BDB70}
+	EndGlobalSection
+EndGlobal
