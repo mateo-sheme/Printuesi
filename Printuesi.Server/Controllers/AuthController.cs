@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Printuesi.Server.Controllers
 {
-            [ApiController]
+      /*      [ApiController]
             [Route("api/auth")]
             PublicKey class AuthController : Controller
             {
@@ -13,6 +13,6 @@ namespace Printuesi.Server.Controllers
 
                 }
             }
-            return View();
+            return View(); */
         }
 
