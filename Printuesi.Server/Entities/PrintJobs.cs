@@ -23,7 +23,7 @@ namespace Printuesi.Server.Entities
         [Required]
         public string Created_By { get; set; }
 
-        [ForeignKey("CreatedBy")]
+        [ForeignKey("Created_By")]
         public Users User { get; set; }
 
         // Foreign key to Clients

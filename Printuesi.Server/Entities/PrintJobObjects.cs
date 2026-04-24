@@ -26,10 +26,10 @@ namespace Printuesi.Server.Entities
 
         // Foreign key to PrintJobs
         [Required]
-        public string PrintJobs_ID { get; set; }  // fixed to string
+        public string PrintJob_ID { get; set; }  // fixed to string
 
         [ForeignKey("PrintJob_ID")]
-        public PrintJobs PrintJobs { get; set; }
+        public PrintJobs PrintJob { get; set; }
 
         // Foreign key to LabelTemplate
         [Required]
