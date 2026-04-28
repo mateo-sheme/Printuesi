@@ -6,7 +6,7 @@ namespace Printuesi.Server.Entities
     public class Users
     {
         [Key]
-        public string User_ID { get; set; }
+        public Guid UserID { get; set; } = Guid.NewGuid();
 
         [Required]
         public string Name { get; set; } = string.Empty;
@@ -19,8 +19,8 @@ namespace Printuesi.Server.Entities
         public UserRole Role { get; set; }
 
         [Required]
-        public DateTime Created_At { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public ICollection<PrintJobs> PrintJobs { get; set; }
+        public ICollection<PrintJobs> PrintJobs { get; set; } = new List<PrintJobs>();
     }
 }

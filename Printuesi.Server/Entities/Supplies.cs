@@ -6,7 +6,7 @@ namespace Printuesi.Server.Entities
     public class Supplies
     {
         [Key]
-        public string Supply_ID { get; set; }
+        public Guid SupplyID { get; set; } = Guid.NewGuid();
 
         [Required]
         public SupplyType SupplyType { get; set; }
@@ -20,6 +20,6 @@ namespace Printuesi.Server.Entities
         [Required]
         public DateOnly Added { get; set; }
 
-        public ICollection<SupplyUsageLogs> UsageLogs { get; set; }
+        public ICollection<SupplyUsageLogs> UsageLogs { get; set; } = new List<SupplyUsageLogs>();
     }
 }

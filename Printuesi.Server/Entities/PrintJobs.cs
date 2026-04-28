@@ -7,33 +7,33 @@ namespace Printuesi.Server.Entities
     public class PrintJobs
     {
         [Key]
-        public string PrintJob_ID { get; set; }
+        public Guid PrintJobID { get; set; } = Guid.NewGuid();
 
         [Required]
         public Status Status { get; set; }
 
         [Required]
-        public DateTime Created_At { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         [Required]
-        public DateTime? Completed_At { get; set; }
+        public DateTime? CompletedAt { get; set; }
 
         public string Notes { get; set; } = string.Empty;
 
         [Required]
-        public string Created_By { get; set; }
+        public Guid CreatedBy { get; set; }
 
-        [ForeignKey("Created_By")]
-        public Users User { get; set; }
+        [ForeignKey("CreatedBy")]
+        public Users User { get; set; } = null!;
 
         // Foreign key to Clients
         [Required]
-        public string Client_ID { get; set; }
+        public Guid ClientID { get; set; }
 
-        [ForeignKey("Client_ID")]
-        public Clients Client { get; set; }
+        [ForeignKey("ClientID")]
+        public Clients Client { get; set; } = null!;
 
         // Navigation — one job has many items
-        public ICollection<PrintJobObjects> PrintJobObjects { get; set; }
+        public ICollection<PrintJobObjects> PrintJobObjects { get; set; } = new List<PrintJobObjects>();
     }
 }

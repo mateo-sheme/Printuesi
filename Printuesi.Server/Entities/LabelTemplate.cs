@@ -1,30 +1,32 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Printuesi.Server.Enums;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace Printuesi.Server.Entities
 {
     public class LabelTemplate
     {
         [Key]
-        public string Label_ID { get; set; }
+        public Guid LabelID { get; set; } = Guid.NewGuid();
 
         [Required]
-        public string Client_ID { get; set; } = string.Empty;
+        public Guid ClientID { get; set; }
 
         [Required]
         public PaperSize PaperSize { get; set; }
 
         [Required]
-        public string Label_Name { get; set; } = string.Empty;
+        public string LabelName { get; set; } = string.Empty;
 
         [Required]
-        public string Pdf_Path { get; set; } = string.Empty;
+        public string PdfPath { get; set; } = string.Empty;
 
-        public required string Date_Format { get; set; }          // "dd/MM/yyyy" or "MM/yyyy"
-        public int Expiry_Offset_Months { get; set; }
+        [Required]
+        public string DateFormat { get; set; } = string.Empty;          // "dd/MM/yyyy" or "MM/yyyy"
+        public int ExpiryOffsetMonths { get; set; }
 
-        [ForeignKey("Client_ID")]
-        public Clients Clients { get; set; }
+        [ForeignKey("ClientID")]
+        public Clients Clients { get; set; } = null!;
     }
 }

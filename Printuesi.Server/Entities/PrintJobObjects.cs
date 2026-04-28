@@ -7,7 +7,7 @@ namespace Printuesi.Server.Entities
     public class PrintJobObjects
     {
         [Key]
-        public string PrintJobObject_ID { get; set; }
+        public Guid PrintJobObjectID { get; set; } = Guid.NewGuid();
 
         [Required]
         public int Quantity_Requested { get; set; }
@@ -16,9 +16,8 @@ namespace Printuesi.Server.Entities
         public int Quantity_Printed { get; set; }
 
         [Required]
-        public required string Expiry_Date { get; set; }
+        public string Expiry_Date { get; set; } = string.Empty;
 
-        [Required]
         public string? Lot_Num { get; set; }
 
         [Required]
@@ -26,17 +25,16 @@ namespace Printuesi.Server.Entities
 
         // Foreign key to PrintJobs
         [Required]
-        public string PrintJob_ID { get; set; }  // fixed to string
+        public Guid PrintJobID { get; set; }
 
-        [ForeignKey("PrintJob_ID")]
-        public PrintJobs PrintJob { get; set; }
+        [ForeignKey("PrintJobID")]
+        public PrintJobs PrintJob { get; set; } = null!;
 
         // Foreign key to LabelTemplate
         [Required]
-        public string Label_ID { get; set; }  // fixed to string
+        public Guid LabelID { get; set; }
 
-        [ForeignKey("Label_ID")]
-        public LabelTemplate LabelTemplate { get; set; }
-
+        [ForeignKey("LabelID")]
+        public LabelTemplate LabelTemplate { get; set; } = null!;
     }
 }

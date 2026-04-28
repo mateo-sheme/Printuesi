@@ -1,18 +1,37 @@
-﻿using System.Security.Cryptography.X509Certificates;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using Printuesi.Server.Services;
 
-namespace Printuesi.Server.Controllers
+namespace Project.Server.Controllers
 {
-      /*     [ApiController]
-            [Route("api/auth")]
-            PublicKey class AuthController : Controller
-            {
-                [HttpPost]
-                public async Task<IActionResult> Login([FromBody] User userInput)
-                {
+    [ApiController]
+    [Route("api/auth")]
+    public class AuthController : ControllerBase
+    {
+        private readonly IAuthService _authService;
 
-                }
-            }
-            return View(); */
+        public AuthController(IAuthService authService)
+        {
+            _authService = authService;
         }
+
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        {
+            var result = await _authService.LoginAsync(request);
+
+            if (result == null)
+            {
+                return Unauthorized(new { message = "Invadil name or password" });
+                // returns: { token, userId, name, role, expiresAt }
+            }
+            return Ok(result);
+        }
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            return Ok(new { message = "Logged out" });
+        }
+    }
+}
+
 

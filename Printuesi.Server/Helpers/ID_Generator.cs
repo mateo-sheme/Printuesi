@@ -2,12 +2,12 @@
 {
     public class ID_Generator
     {
-        private static readonly Random _random = new Random();
 
         public static string Generate(string prefix)
         {
-            long number = (long)(_random.NextDouble() * 90000000) +10000000;
-            return $"{prefix}{number}";
+            // Use part of a Guid to guarantee uniqueness while keeping it short
+            string unique = Guid.NewGuid().ToString("N")[..8].ToUpper();
+            return $"{prefix}-{unique}";
         }
 
         public static string Client() => Generate("C");

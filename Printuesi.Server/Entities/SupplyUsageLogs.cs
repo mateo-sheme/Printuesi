@@ -6,25 +6,25 @@ namespace Printuesi.Server.Entities
     public class SupplyUsageLogs
     {
         [Key]
-        public string SupplyUsageLog_ID { get; set; }
+        public Guid SupplyUsageLogID { get; set; } = Guid.NewGuid();
 
         [Required]
-        public float Used_Quantity { get; set; }
+        public float UsedQuantity { get; set; }
 
         [Required]
-        public DateTime Used_At { get; set; }
+        public DateTime UsedAt { get; set; } = DateTime.UtcNow;
 
         [Required]
-        public string Supply_ID { get; set; }  // fixed to string
+        public Guid SupplyID { get; set; }
 
-        [ForeignKey("Supply_ID")]
-        public Supplies Supply { get; set; }
+        [ForeignKey("SupplyID")]
+        public Supplies Supply { get; set; } = null!;
 
         // Foreign key to PrintJobs
         [Required]
-        public string PrintJob_ID { get; set; }
+        public Guid PrintJobID { get; set; }
 
-        [ForeignKey("PrintJob_ID")]
-        public PrintJobs PrintJob { get; set; }
+        [ForeignKey("PrintJobID")]
+        public PrintJobs PrintJob { get; set; } = null!;
     }
 }
