@@ -6,7 +6,7 @@ namespace Printuesi.Server.Entities
     public class Users
     {
         [Key]
-        public Guid UserID { get; set; } = Guid.NewGuid();
+        public string UserID { get; set; } = string.Empty;
 
         [Required]
         public string Name { get; set; } = string.Empty;

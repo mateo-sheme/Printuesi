@@ -31,6 +31,19 @@ namespace Project.Server.Controllers
         {
             return Ok(new { message = "Logged out" });
         }
+
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        {
+            var result = await _authService.RegisterAsync(request);
+
+            if (result == null)
+            {
+                return BadRequest(new { message = "Registration failed" });
+            }
+
+            return Ok(result);
+        }
     }
 }
 
