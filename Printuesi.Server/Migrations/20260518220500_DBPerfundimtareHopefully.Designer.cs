@@ -12,8 +12,8 @@ using Printuesi.Server.Data;
 namespace Printuesi.Server.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260428213435_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260518220500_DBPerfundimtareHopefully")]
+    partial class DBPerfundimtareHopefully
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -27,8 +27,8 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.Clients", b =>
                 {
-                    b.Property<Guid>("ClientID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("ClientID")
+                        .HasColumnType("text")
                         .HasColumnName("client_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -53,12 +53,13 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.LabelTemplate", b =>
                 {
-                    b.Property<Guid>("LabelID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("LabelID")
+                        .HasColumnType("text")
                         .HasColumnName("label_id");
 
-                    b.Property<Guid>("ClientID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("ClientID")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("client_id");
 
                     b.Property<string>("DateFormat")
@@ -95,8 +96,8 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.PrintJobObjects", b =>
                 {
-                    b.Property<Guid>("PrintJobObjectID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("PrintJobObjectID")
+                        .HasColumnType("text")
                         .HasColumnName("print_job_object_id");
 
                     b.Property<string>("Expiry_Date")
@@ -104,16 +105,18 @@ namespace Printuesi.Server.Migrations
                         .HasColumnType("text")
                         .HasColumnName("expiry_date");
 
-                    b.Property<Guid>("LabelID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("LabelID")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("label_id");
 
                     b.Property<string>("Lot_Num")
                         .HasColumnType("text")
                         .HasColumnName("lot_num");
 
-                    b.Property<Guid>("PrintJobID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("PrintJobID")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("print_job_id");
 
                     b.Property<int>("Quantity_Printed")
@@ -142,12 +145,13 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.PrintJobs", b =>
                 {
-                    b.Property<Guid>("PrintJobID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("PrintJobID")
+                        .HasColumnType("text")
                         .HasColumnName("print_job_id");
 
-                    b.Property<Guid>("ClientID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("ClientID")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("client_id");
 
                     b.Property<DateTime>("CompletedAt")
@@ -158,8 +162,9 @@ namespace Printuesi.Server.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uuid")
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("created_by");
 
                     b.Property<string>("Notes")
@@ -185,8 +190,8 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.Supplies", b =>
                 {
-                    b.Property<Guid>("SupplyID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("SupplyID")
+                        .HasColumnType("text")
                         .HasColumnName("supply_id");
 
                     b.Property<DateOnly>("Added")
@@ -214,16 +219,18 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.SupplyUsageLogs", b =>
                 {
-                    b.Property<Guid>("SupplyUsageLogID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("SupplyUsageLogID")
+                        .HasColumnType("text")
                         .HasColumnName("supply_usage_log_id");
 
-                    b.Property<Guid>("PrintJobID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("PrintJobID")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("print_job_id");
 
-                    b.Property<Guid>("SupplyID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("SupplyID")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("supply_id");
 
                     b.Property<DateTime>("UsedAt")
@@ -248,8 +255,8 @@ namespace Printuesi.Server.Migrations
 
             modelBuilder.Entity("Printuesi.Server.Entities.Users", b =>
                 {
-                    b.Property<Guid>("UserID")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserID")
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.Property<DateTime>("CreatedAt")

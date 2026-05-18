@@ -1,12 +1,13 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using Printuesi.Server.Enums;
+using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Entities
 {
     public class Supplies
     {
         [Key]
-        public Guid SupplyID { get; set; } = Guid.NewGuid();
+        public string SupplyID { get; set; } = ID_Generator.Supply();
 
         [Required]
         public SupplyType SupplyType { get; set; }

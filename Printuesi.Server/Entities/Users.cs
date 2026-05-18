@@ -1,12 +1,13 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using Printuesi.Server.Enums;
+using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Entities
 {
     public class Users
     {
         [Key]
-        public string UserID { get; set; } = string.Empty;
+        public string UserID { get; set; } = ID_Generator.User();
 
         [Required]
         public string Name { get; set; } = string.Empty;

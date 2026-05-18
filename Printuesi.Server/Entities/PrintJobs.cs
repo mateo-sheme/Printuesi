@@ -1,13 +1,14 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Printuesi.Server.Enums;
+using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Entities
 {
     public class PrintJobs
     {
         [Key]
-        public Guid PrintJobID { get; set; } = Guid.NewGuid();
+        public string PrintJobID { get; set; } = ID_Generator.PrintJob();
 
         [Required]
         public Status Status { get; set; }
@@ -21,14 +22,14 @@ namespace Printuesi.Server.Entities
         public string Notes { get; set; } = string.Empty;
 
         [Required]
-        public Guid CreatedBy { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
 
         [ForeignKey("CreatedBy")]
         public Users User { get; set; } = null!;
 
         // Foreign key to Clients
         [Required]
-        public Guid ClientID { get; set; }
+        public string ClientID { get; set; } = string.Empty;
 
         [ForeignKey("ClientID")]
         public Clients Client { get; set; } = null!;

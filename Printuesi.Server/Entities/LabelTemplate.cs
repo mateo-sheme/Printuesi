@@ -1,17 +1,17 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Printuesi.Server.Enums;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Entities
 {
     public class LabelTemplate
     {
         [Key]
-        public Guid LabelID { get; set; } = Guid.NewGuid();
+        public string LabelID { get; set; } = ID_Generator.Template();
 
         [Required]
-        public Guid ClientID { get; set; }
+        public string ClientID { get; set; } = string.Empty;
 
         [Required]
         public PaperSize PaperSize { get; set; }

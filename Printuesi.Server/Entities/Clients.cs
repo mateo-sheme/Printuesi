@@ -1,12 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Printuesi.Server.Enums;
+using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Entities
 {
     public class Clients
     {
         [Key]
-        public Guid ClientID { get; set; } = Guid.NewGuid();
+        public string ClientID { get; set; } = ID_Generator.Client();
 
         [Required]
         public string NIPT { get; set; } = string.Empty;

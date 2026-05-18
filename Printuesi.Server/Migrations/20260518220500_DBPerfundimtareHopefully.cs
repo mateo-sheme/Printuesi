@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Printuesi.Server.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class DBPerfundimtareHopefully : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,7 +15,7 @@ namespace Printuesi.Server.Migrations
                 name: "clients",
                 columns: table => new
                 {
-                    client_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    client_id = table.Column<string>(type: "text", nullable: false),
                     nipt = table.Column<string>(type: "text", nullable: false),
                     name = table.Column<string>(type: "text", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
@@ -29,7 +29,7 @@ namespace Printuesi.Server.Migrations
                 name: "supplies",
                 columns: table => new
                 {
-                    supply_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    supply_id = table.Column<string>(type: "text", nullable: false),
                     supply_type = table.Column<int>(type: "integer", nullable: false),
                     quantity = table.Column<float>(type: "real", nullable: false),
                     unit = table.Column<string>(type: "text", nullable: false),
@@ -44,7 +44,7 @@ namespace Printuesi.Server.Migrations
                 name: "users",
                 columns: table => new
                 {
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    user_id = table.Column<string>(type: "text", nullable: false),
                     name = table.Column<string>(type: "text", nullable: false),
                     password_hash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     role = table.Column<int>(type: "integer", nullable: false),
@@ -59,8 +59,8 @@ namespace Printuesi.Server.Migrations
                 name: "label_templates",
                 columns: table => new
                 {
-                    label_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    client_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    label_id = table.Column<string>(type: "text", nullable: false),
+                    client_id = table.Column<string>(type: "text", nullable: false),
                     paper_size = table.Column<int>(type: "integer", nullable: false),
                     label_name = table.Column<string>(type: "text", nullable: false),
                     pdf_path = table.Column<string>(type: "text", nullable: false),
@@ -82,13 +82,13 @@ namespace Printuesi.Server.Migrations
                 name: "print_jobs",
                 columns: table => new
                 {
-                    print_job_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    print_job_id = table.Column<string>(type: "text", nullable: false),
                     status = table.Column<int>(type: "integer", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     completed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     notes = table.Column<string>(type: "text", nullable: false),
-                    created_by = table.Column<Guid>(type: "uuid", nullable: false),
-                    client_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    created_by = table.Column<string>(type: "text", nullable: false),
+                    client_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -109,14 +109,14 @@ namespace Printuesi.Server.Migrations
                 name: "print_job_objects",
                 columns: table => new
                 {
-                    print_job_object_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    print_job_object_id = table.Column<string>(type: "text", nullable: false),
                     quantity_requested = table.Column<int>(type: "integer", nullable: false),
                     quantity_printed = table.Column<int>(type: "integer", nullable: false),
                     expiry_date = table.Column<string>(type: "text", nullable: false),
                     lot_num = table.Column<string>(type: "text", nullable: true),
                     status = table.Column<int>(type: "integer", nullable: false),
-                    print_job_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    label_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    print_job_id = table.Column<string>(type: "text", nullable: false),
+                    label_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -137,11 +137,11 @@ namespace Printuesi.Server.Migrations
                 name: "supply_usage_logs",
                 columns: table => new
                 {
-                    supply_usage_log_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    supply_usage_log_id = table.Column<string>(type: "text", nullable: false),
                     used_quantity = table.Column<float>(type: "real", nullable: false),
                     used_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    supply_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    print_job_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    supply_id = table.Column<string>(type: "text", nullable: false),
+                    print_job_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {

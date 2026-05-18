@@ -1,12 +1,13 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Entities
 {
     public class SupplyUsageLogs
     {
         [Key]
-        public Guid SupplyUsageLogID { get; set; } = Guid.NewGuid();
+        public string SupplyUsageLogID { get; set; } = ID_Generator.SupplyUsage();
 
         [Required]
         public float UsedQuantity { get; set; }
@@ -15,14 +16,14 @@ namespace Printuesi.Server.Entities
         public DateTime UsedAt { get; set; } = DateTime.UtcNow;
 
         [Required]
-        public Guid SupplyID { get; set; }
+        public string SupplyID { get; set; } = string.Empty;
 
         [ForeignKey("SupplyID")]
         public Supplies Supply { get; set; } = null!;
 
         // Foreign key to PrintJobs
         [Required]
-        public Guid PrintJobID { get; set; }
+        public string PrintJobID { get; set; } = string.Empty;
 
         [ForeignKey("PrintJobID")]
         public PrintJobs PrintJob { get; set; } = null!;
