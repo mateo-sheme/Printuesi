@@ -7,9 +7,9 @@ namespace Project.Server.Controllers
     [Route("api/auth")]
     public class AuthController : ControllerBase
     {
-        private readonly IAuthService _authService;
+        private readonly AuthService_Interface _authService;
 
-        public AuthController(IAuthService authService)
+        public AuthController(AuthService_Interface authService)
         {
             _authService = authService;
         }

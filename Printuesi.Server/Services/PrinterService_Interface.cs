@@ -1,6 +1,6 @@
 ﻿namespace Printuesi.Server.Services
 {
-    public interface IPrinterService
+    public interface PrinterService_Interface
     {
 
         // kjo eshte koka dmth service mund te bej kete kete kete

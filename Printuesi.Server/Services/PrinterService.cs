@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Printuesi.Server.Services
 {
-    public class PrinterService : IPrinterService
+    public class PrinterService : PrinterService_Interface
     {
         private readonly string _printerIP;
         private readonly int _lprport = 515;

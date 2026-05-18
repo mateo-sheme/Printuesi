@@ -10,7 +10,7 @@ using Printuesi.Server.Enums;
 
 namespace Printuesi.Server.Services
 {
-    public class AuthService : IAuthService
+    public class AuthService : AuthService_Interface
         {
             private readonly ApplicationDbContext _db;
             private readonly IConfiguration _config;

@@ -15,9 +15,12 @@ builder.Services.AddControllers();
 //builder.Services.AddDbContext<ApplicationDbContext>(option => 
 //option.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddScoped<IPrinterService, PrinterService>();
-
-builder.Services.AddScoped<IAuthService, AuthService>();
+// Register Services
+builder.Services.AddScoped<PrinterService_Interface, PrinterService>();
+builder.Services.AddScoped<AuthService_Interface, AuthService>();
+builder.Services.AddScoped<UsersService_Interface, UsersService>();
+builder.Services.AddScoped<ClientService_Interface, ClientService>();
+builder.Services.AddScoped<LabelTemplate_Interface, LabelTemplateService>();
 
 builder.Services.AddDbContext<ApplicationDbContext>(option =>
     option.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))

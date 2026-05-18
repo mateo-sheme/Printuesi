@@ -2,7 +2,7 @@
 
 namespace Printuesi.Server.Services
 {
-    public interface IAuthService
+    public interface AuthService_Interface
     {
         Task<LoginResponse?> LoginAsync(LoginRequest request);
         Task<RegisterResponse?> RegisterAsync(RegisterRequest request);

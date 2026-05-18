@@ -8,9 +8,9 @@ namespace Printuesi.Server.Controllers
     [Route("api/[controller]")]
     public class PrinterController : ControllerBase
     {
-        private readonly IPrinterService _printerService;
+        private readonly PrinterService_Interface _printerService;
 
-        public PrinterController(IPrinterService printerService)
+        public PrinterController(PrinterService_Interface printerService)
         {
             _printerService = printerService;
         }

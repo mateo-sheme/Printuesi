@@ -2,8 +2,13 @@
 
 namespace Printuesi.Server.Services
 {
-    public interface IUsersService
+    public interface UsersService_Interface
     {
+        Task<UserResponse> CreateUserAsync(CreateUserRequest request);
+        Task<UserResponse?> GetUserAsync(string userID);
+        Task<List<UserResponse>> GetAllUsersAsync();
+        Task<UserResponse?> UpdateUserAsync(string userID, UpdateUserRequest request);
+        Task<bool> DeleteUserAsync(string userID);
     }
 
     public class CreateUserRequest
