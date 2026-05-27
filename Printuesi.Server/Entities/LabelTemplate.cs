@@ -17,6 +17,9 @@ namespace Printuesi.Server.Entities
         public PaperSize PaperSize { get; set; }
 
         [Required]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [Required]
         public string LabelName { get; set; } = string.Empty;
 
         [Required]

@@ -21,12 +21,18 @@ builder.Services.AddScoped<AuthService_Interface, AuthService>();
 builder.Services.AddScoped<UsersService_Interface, UsersService>();
 builder.Services.AddScoped<ClientService_Interface, ClientService>();
 builder.Services.AddScoped<LabelTemplate_Interface, LabelTemplateService>();
+builder.Services.AddScoped<PdfService_Interface, PdfService>();
+builder.Services.AddScoped<OrderScanService_Interface, OrderScanService>();
+builder.Services.AddScoped<PrintJobService_Interface, PrintJobService>();
+builder.Services.AddHostedService<OutputCleanupService>();
+
 
 builder.Services.AddDbContext<ApplicationDbContext>(option =>
     option.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
           .UseSnakeCaseNamingConvention()); // comes from EFCore.NamingConventions
 
 var jwtSecret = builder.Configuration["Jwt:Secret"]!;
+var outputPath = Path.Combine(builder.Environment.WebRootPath, "labels_output");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

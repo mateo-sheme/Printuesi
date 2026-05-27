@@ -331,6 +331,7 @@ namespace Printuesi.Server.Services
                 PaperSize = template.PaperSize,
                 PdfPath = template.PdfPath,
                 DateFormat = template.DateFormat,
+                CreatedAt = template.CreatedAt,
                 ExpiryOffsetMonths = template.ExpiryOffsetMonths,
             };
         }

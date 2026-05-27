@@ -11,6 +11,9 @@ namespace Printuesi.Server.Entities
         public string PrintJobObjectID { get; set; } = ID_Generator.PrintJobObject();
 
         [Required]
+        public string ProductCode { get; set; } = string.Empty;
+
+        [Required]
         public int Quantity_Requested { get; set; }
 
         [Required]

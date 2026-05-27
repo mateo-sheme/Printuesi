@@ -68,8 +68,7 @@ namespace Printuesi.Server.Controllers
                     return BadRequest(new { message = "File must be a PDF." });
 
                 // Save PDF and validate placeholders
-                var templateService = _templateService as LabelTemplateService;
-                await templateService.SavePdfFileAsync(templateID, pdfFile);
+                await _templateService.SavePdfFileAsync(templateID, pdfFile);
 
                 // Return updated template
                 var result = await _templateService.GetTemplateAsync(templateID);
@@ -260,8 +259,14 @@ namespace Printuesi.Server.Controllers
                 finally
                 {
                     // Clean up temp file
-                    if (File.Exists(tempPath))
-                        File.Delete(tempPath);
+                    try
+                    {
+                        System.IO.File.Delete(tempPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to delete temporary PDF file at {TempPath}: {Message}", tempPath, ex.Message);
+                    }
                 }
             }
             catch (InvalidOperationException ex)

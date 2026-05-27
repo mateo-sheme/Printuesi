@@ -59,6 +59,10 @@ namespace Printuesi.Server.Migrations
                         .HasColumnType("text")
                         .HasColumnName("client_id");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<string>("DateFormat")
                         .IsRequired()
                         .HasColumnType("text")
@@ -116,6 +120,11 @@ namespace Printuesi.Server.Migrations
                         .HasColumnType("text")
                         .HasColumnName("print_job_id");
 
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("product_code");
+
                     b.Property<int>("Quantity_Printed")
                         .HasColumnType("integer")
                         .HasColumnName("quantity_printed");
@@ -151,7 +160,7 @@ namespace Printuesi.Server.Migrations
                         .HasColumnType("text")
                         .HasColumnName("client_id");
 
-                    b.Property<DateTime>("CompletedAt")
+                    b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 

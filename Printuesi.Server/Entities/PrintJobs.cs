@@ -16,7 +16,6 @@ namespace Printuesi.Server.Entities
         [Required]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        [Required]
         public DateTime? CompletedAt { get; set; }
 
         public string Notes { get; set; } = string.Empty;

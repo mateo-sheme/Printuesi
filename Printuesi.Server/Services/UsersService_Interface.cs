@@ -25,12 +25,6 @@ namespace Printuesi.Server.Services
         public string Role { get; set; } = string.Empty;
     }
 
-    public class DeleteUserRequest
-    {
-        public string Name { get; set; } = string.Empty;
-        public string? Password { get; set; } = string.Empty;
-    }
-
     public class UserResponse
     {
         public string UserID { get; set; } = string.Empty;

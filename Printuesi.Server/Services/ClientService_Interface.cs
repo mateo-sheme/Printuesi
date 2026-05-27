@@ -21,12 +21,6 @@
         public string Name { get; set; } = string.Empty;
     }
 
-    public class DeleteClientRequest
-    {
-        public string NIPT { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-    }
-
     public class ClientResponse
     {
         public string ClientID { get; set; } = string.Empty;
