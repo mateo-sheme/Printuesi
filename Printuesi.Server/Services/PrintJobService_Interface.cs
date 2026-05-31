@@ -15,9 +15,27 @@ namespace Printuesi.Server.Services
         Task<PrintJobResponse?> GetPrintJobAsync(string printJobID);
 
         /// <summary>
-        /// Step 3: User confirms paper is loaded for a given paper size group → triggers print
+        /// Step 3: Start printing a paper size group.
+        /// - Checks if paper change needed → if yes, returns NeedsPaperChange = true, caller waits
+        /// - For Mini/Rrethi: sends 1 test copy, returns NeedsTestConfirm = true
+        /// - For Normale/Prodhim: prints all copies directly
         /// </summary>
-        Task<PrintGroupResult> ConfirmAndPrintGroupAsync(string printJobID, PaperSize paperSize);
+        Task<PrintGroupResult> StartGroupAsync(string printJobID, PaperSize paperSize);
+
+        /// <summary>
+        /// Step 4a: User confirmed paper has been changed → send driver + continue
+        /// </summary>
+        Task<PrintGroupResult> ConfirmPaperChangeAsync(string printJobID, PaperSize paperSize);
+
+        /// <summary>
+        /// Step 4b: User confirmed test print is ok → print remaining copies
+        /// </summary>
+        Task<PrintGroupResult> ConfirmTestPrintAsync(string printJobID, PaperSize paperSize);
+
+        /// <summary>
+        /// Step 4c: User said test print is NOT ok → reprint 1 test copy
+        /// </summary>
+        Task<PrintGroupResult> ReprintTestAsync(string printJobID, PaperSize paperSize);
 
         /// <summary>
         /// Get all print jobs, optionally filtered by status
@@ -30,7 +48,7 @@ namespace Printuesi.Server.Services
         Task<bool> CancelPrintJobAsync(string printJobID);
     }
 
-    // ── Request / Response DTOs ───────────────────────────────────────────────
+    // ── DTOs ─────────────────────────────────────────────────────────────────
 
     public class PrintJobResponse
     {
@@ -42,13 +60,10 @@ namespace Printuesi.Server.Services
         public DateTime? CompletedAt { get; set; }
         public string Notes { get; set; } = string.Empty;
         public string CreatedBy { get; set; } = string.Empty;
-        public List<PrintGroupResponse> Groups { get; set; } = new(); // grouped by paper size
+        public List<PrintGroupResponse> Groups { get; set; } = new();
         public List<string> UnrecognizedProducts { get; set; } = new();
     }
 
-    /// <summary>
-    /// Items grouped by paper size — each group is one physical paper load
-    /// </summary>
     public class PrintGroupResponse
     {
         public PaperSize PaperSize { get; set; }
@@ -67,13 +82,10 @@ namespace Printuesi.Server.Services
         public string ExpiryDate { get; set; } = string.Empty;
         public string LotNumber { get; set; } = string.Empty;
         public Status Status { get; set; }
-        public string? LabelFilePath { get; set; }  // resolved path to the label PDF
+        public string? LabelFilePath { get; set; }
         public bool LabelFileFound { get; set; }
     }
 
-    /// <summary>
-    /// Result returned after confirming paper and triggering a print group
-    /// </summary>
     public class PrintGroupResult
     {
         public bool Success { get; set; }
@@ -81,7 +93,12 @@ namespace Printuesi.Server.Services
         public int ItemsPrinted { get; set; }
         public int ItemsFailed { get; set; }
         public List<string> Errors { get; set; } = new();
-        public bool JobCompleted { get; set; }  // true if this was the last group
-        public PaperSize? NextPaperSize { get; set; } // next group to load, if any
+        public bool JobCompleted { get; set; }
+        public PaperSize? NextPaperSize { get; set; }
+
+        // State flags — frontend reacts to these
+        public bool NeedsPaperChange { get; set; }     // user must change paper
+        public bool NeedsTestConfirm { get; set; }     // user must confirm test print
+        public string? Message { get; set; }            // human readable status message
     }
 }

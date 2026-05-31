@@ -15,6 +15,7 @@ namespace Printuesi.Server.Data
         public DbSet<PrintJobObjects> PrintJobObjects { get; set; }
         public DbSet<Supplies> Supplies { get; set; }
         public DbSet<SupplyUsageLogs> SupplyUsageLogs { get; set; }
+        public DbSet<PrinterState> PrinterState { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

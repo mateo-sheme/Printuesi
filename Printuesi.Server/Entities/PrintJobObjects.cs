@@ -35,10 +35,9 @@ namespace Printuesi.Server.Entities
         public PrintJobs PrintJob { get; set; } = null!;
 
         // Foreign key to LabelTemplate
-        [Required]
-        public string LabelID { get; set; } = string.Empty;
+        public string? LabelID { get; set; }
 
         [ForeignKey("LabelID")]
-        public LabelTemplate LabelTemplate { get; set; } = null!;
+        public LabelTemplate? LabelTemplate { get; set; }
     }
 }

@@ -25,7 +25,8 @@ namespace Printuesi.Server.Services
         public async Task<bool> FillPdfPlaceholdersAsync(
             string templatePath,
             Dictionary<string, string> placeholders,
-            string outputPath)
+            string outputPath,
+            bool useWhiteText = false)
         {
             try
             {
@@ -60,7 +61,7 @@ namespace Printuesi.Server.Services
                         foreach (var placeholder in placeholders)
                         {
                             var key = $"{{{{{placeholder.Key}}}}}"; // e.g. {{EXPIRY_DATE}}
-                            ReplaceTextInPdf(page, key, placeholder.Value, textLocations, font);
+                            ReplaceTextInPdf(page, key, placeholder.Value, textLocations, font, useWhiteText);
                         }
                     }
 
@@ -120,11 +121,12 @@ namespace Printuesi.Server.Services
         }
 
         private void ReplaceTextInPdf(
-            PdfPage page,
-            string placeholder,
-            string value,
-            List<TextLocationData> textLocations,
-            PdfFont font)
+        PdfPage page,
+        string placeholder,
+        string value,
+        List<TextLocationData> textLocations,
+        PdfFont font,
+        bool useWhiteText = false)
         {
             var location = textLocations.FirstOrDefault(l => l.Text.Contains(placeholder));
             if (location == null)
@@ -135,16 +137,16 @@ namespace Printuesi.Server.Services
 
             var fontSize = location.FontSize > 0 ? location.FontSize : 10f;
             var canvas = new PdfCanvas(page);
+            var color = useWhiteText ? ColorConstants.WHITE : ColorConstants.BLACK;
 
-            // Write replacement value in black using the custom font at the placeholder's position
             canvas.BeginText()
                   .SetFontAndSize(font, fontSize)
-                  .SetFillColor(ColorConstants.BLACK)
+                  .SetFillColor(color)
                   .MoveText(location.X, location.Y)
                   .ShowText(value)
                   .EndText();
 
-            _logger.LogInformation(
+        _logger.LogInformation(
                 "Replaced '{Placeholder}' with '{Value}' at ({X:F1}, {Y:F1}) size {Size:F1}",
                 placeholder, value, location.X, location.Y, fontSize);
         }
@@ -204,6 +206,8 @@ namespace Printuesi.Server.Services
                                - renderInfo.GetDescentLine().GetStartPoint().Get(1)
                 });
             }
+
+
         }
 
         private class TextLocationData

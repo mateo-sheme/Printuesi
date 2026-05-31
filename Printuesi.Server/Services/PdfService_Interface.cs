@@ -10,8 +10,9 @@
         /// <param name="outputPath">Path where the filled PDF will be saved</param>
         /// <returns>True if successful, false otherwise</returns>
         Task<bool> FillPdfPlaceholdersAsync(
-            string templatePath,
-            Dictionary<string, string> placeholders,
-            string outputPath);
+        string templatePath,
+        Dictionary<string, string> placeholders,
+        string outputPath,
+        bool useWhiteText = false);
     }
 }

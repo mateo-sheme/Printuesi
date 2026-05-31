@@ -20,9 +20,9 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Step 1: Upload order PDF → scan → create print job
-        /// Returns the full job with items grouped by paper size,
-        /// and flags which label files were found/missing on the share.
+        /// Step 1: Upload order PDF → scan → create print job.
+        /// Returns job with items grouped by paper size.
+        /// Check LabelFileFound on each item — if false the label PDF is missing on the share.
         /// </summary>
         [HttpPost("create-from-order")]
         public async Task<ActionResult<PrintJobResponse>> CreateFromOrder(
@@ -46,7 +46,6 @@ namespace Printuesi.Server.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning("Business error creating print job: {Message}", ex.Message);
                 return Conflict(new { message = ex.Message });
             }
             catch (Exception ex)
@@ -57,8 +56,7 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Step 2: Get print job — shows all items grouped by paper size
-        /// Frontend uses this to display what paper to load first
+        /// Get print job by ID — shows all items grouped by paper size with current status.
         /// </summary>
         [HttpGet("{printJobID}")]
         public async Task<ActionResult<PrintJobResponse>> GetPrintJob(string printJobID)
@@ -79,7 +77,7 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Get all print jobs, optionally filtered by status
+        /// Get all print jobs, optionally filtered by status.
         /// </summary>
         [HttpGet("")]
         public async Task<ActionResult<List<PrintJobResponse>>> GetAllPrintJobs(
@@ -98,34 +96,112 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Step 3: User has loaded the paper and confirmed — triggers PDF fill + print
-        /// Call this once per paper size group.
-        /// Response tells you: what printed, what failed, and what paper size to load next.
+        /// Step 3: Start printing a paper size group.
+        /// 
+        /// Possible responses:
+        /// - NeedsPaperChange = true  → call confirm-paper-change when paper is loaded
+        /// - NeedsTestConfirm = true  → call confirm-test or reprint-test
+        /// - JobCompleted = true      → all done
+        /// - NextPaperSize set        → call start-group again for next size
         /// </summary>
-        [HttpPost("{printJobID}/confirm-and-print")]
-        public async Task<ActionResult<PrintGroupResult>> ConfirmAndPrint(
+        [HttpPost("{printJobID}/start-group")]
+        public async Task<ActionResult<PrintGroupResult>> StartGroup(
             string printJobID,
             [FromQuery] PaperSize paperSize)
         {
             try
             {
-                var result = await _printJobService.ConfirmAndPrintGroupAsync(printJobID, paperSize);
+                var result = await _printJobService.StartGroupAsync(printJobID, paperSize);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning("Business error confirming print: {Message}", ex.Message);
                 return Conflict(new { message = ex.Message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error confirming print for job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error during print.", error = ex.Message });
+                _logger.LogError(ex, "Error starting group for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error starting print group.", error = ex.Message });
             }
         }
 
         /// <summary>
-        /// Cancel a print job
+        /// Step 4a: User has physically changed the paper and confirms it is loaded.
+        /// Continues printing for this paper size group.
+        /// </summary>
+        [HttpPost("{printJobID}/confirm-paper-change")]
+        public async Task<ActionResult<PrintGroupResult>> ConfirmPaperChange(
+            string printJobID,
+            [FromQuery] PaperSize paperSize)
+        {
+            try
+            {
+                var result = await _printJobService.ConfirmPaperChangeAsync(printJobID, paperSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error confirming paper change for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error confirming paper change.", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Step 4b: User confirms test print alignment is correct.
+        /// Prints remaining copies (quantity - 1).
+        /// </summary>
+        [HttpPost("{printJobID}/confirm-test")]
+        public async Task<ActionResult<PrintGroupResult>> ConfirmTest(
+            string printJobID,
+            [FromQuery] PaperSize paperSize)
+        {
+            try
+            {
+                var result = await _printJobService.ConfirmTestPrintAsync(printJobID, paperSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error confirming test print for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error confirming test print.", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Step 4c: Test print alignment is NOT ok — reprints 1 test copy.
+        /// Call confirm-test after checking, or cancel the job.
+        /// </summary>
+        [HttpPost("{printJobID}/reprint-test")]
+        public async Task<ActionResult<PrintGroupResult>> ReprintTest(
+            string printJobID,
+            [FromQuery] PaperSize paperSize)
+        {
+            try
+            {
+                var result = await _printJobService.ReprintTestAsync(printJobID, paperSize);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reprinting test for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error reprinting test.", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Cancel a print job.
         /// </summary>
         [HttpDelete("{printJobID}")]
         public async Task<ActionResult> CancelPrintJob(string printJobID)
@@ -147,28 +223,6 @@ namespace Printuesi.Server.Controllers
                 _logger.LogError(ex, "Error cancelling print job {ID}", printJobID);
                 return StatusCode(500, new { message = "Error cancelling print job.", error = ex.Message });
             }
-        }
-
-        [HttpPost("debug-scan")]
-        public async Task<ActionResult> DebugScan(IFormFile orderPdf)
-        {
-            var tempPath = Path.Combine(Path.GetTempPath(), $"debug_{Guid.NewGuid()}.pdf");
-            await using (var fs = new FileStream(tempPath, FileMode.Create))
-                await orderPdf.CopyToAsync(fs);
-
-            using var reader = new iText.Kernel.Pdf.PdfReader(tempPath);
-            using var doc = new iText.Kernel.Pdf.PdfDocument(reader);
-            var text = iText.Kernel.Pdf.Canvas.Parser.PdfTextExtractor
-                .GetTextFromPage(doc.GetPage(1));
-
-            // Show hex values of first 300 chars so we can see exactly what ë looks like
-            var hex = string.Join(" ", text.Take(300).Select(c => $"{(int)c:X4}"));
-
-            return Ok(new
-            {
-                rawText = text.Substring(0, Math.Min(300, text.Length)),
-                hexDump = hex
-            });
         }
     }
 }

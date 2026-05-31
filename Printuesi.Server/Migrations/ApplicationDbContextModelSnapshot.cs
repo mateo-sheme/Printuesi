@@ -107,7 +107,6 @@ namespace Printuesi.Server.Migrations
                         .HasColumnName("expiry_date");
 
                     b.Property<string>("LabelID")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("label_id");
 
@@ -192,6 +191,29 @@ namespace Printuesi.Server.Migrations
                         .HasDatabaseName("ix_print_jobs_created_by");
 
                     b.ToTable("print_jobs", (string)null);
+                });
+
+            modelBuilder.Entity("Printuesi.Server.Entities.PrinterState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CurrentPaperSize")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_paper_size");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_updated");
+
+                    b.HasKey("Id")
+                        .HasName("pk_printer_state");
+
+                    b.ToTable("printer_state", (string)null);
                 });
 
             modelBuilder.Entity("Printuesi.Server.Entities.Supplies", b =>
@@ -308,7 +330,6 @@ namespace Printuesi.Server.Migrations
                         .WithMany()
                         .HasForeignKey("LabelID")
                         .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired()
                         .HasConstraintName("fk_print_job_objects_label_templates_label_id");
 
                     b.HasOne("Printuesi.Server.Entities.PrintJobs", "PrintJob")

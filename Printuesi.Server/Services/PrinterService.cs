@@ -44,7 +44,59 @@ namespace Printuesi.Server.Services
             }
         }
 
-        public async Task<bool> SendFileLprAsync(string filePath)
+        public async Task<bool> SendDriverAsync(string driverPath)
+        {
+            if (!File.Exists(driverPath))
+                return false;
+
+            try
+            {
+                var data = await File.ReadAllBytesAsync(driverPath);
+                var fileName = Path.GetFileName(driverPath);
+
+                using var client = new TcpClient();
+                var connectTask = client.ConnectAsync(_printerIP, _lprport);
+                if (await Task.WhenAny(connectTask, Task.Delay(10000)) != connectTask)
+                    return false;
+
+                var stream = client.GetStream();
+
+                var receiveJobCmd = new byte[] { 0x02 }
+                    .Concat(System.Text.Encoding.ASCII.GetBytes(_printerQueue))
+                    .Concat(new byte[] { 0x0A })
+                    .ToArray();
+                await stream.WriteAsync(receiveJobCmd);
+                await Task.Delay(200);
+
+                var controlContent = $"Hhost\nPuser\nfdfA001host\nUdfA001host\nN{fileName}\n";
+                var controlBytes = System.Text.Encoding.ASCII.GetBytes(controlContent);
+                var controlHeader = System.Text.Encoding.ASCII.GetBytes(
+                    $"\x02{controlBytes.Length} cfA001host\n");
+
+                await stream.WriteAsync(controlHeader);
+                await Task.Delay(100);
+                await stream.WriteAsync(controlBytes);
+                await stream.WriteAsync(new byte[] { 0x00 });
+                await Task.Delay(200);
+
+                var dataHeader = System.Text.Encoding.ASCII.GetBytes(
+                    $"\x03{data.Length} dfA001host\n");
+
+                await stream.WriteAsync(dataHeader);
+                await Task.Delay(100);
+                await stream.WriteAsync(data);
+                await stream.WriteAsync(new byte[] { 0x00 });
+
+                await Task.Delay(1500); // give printer time to apply settings
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /*public async Task<bool> SendFileLprAsync(string filePath)
         {
 
             //si fillim shikon nese file ca cuam ekziston apo jo ne kundert ndalon
@@ -107,7 +159,7 @@ namespace Printuesi.Server.Services
             {
                 return false;
             }
-        }
+        }*/
 
         public async Task<bool> SendFileRawAsync(string filePath)
         {
@@ -132,6 +184,11 @@ namespace Printuesi.Server.Services
             {
                 return false;
             }
+        }
+
+        public Task<bool> SendFileLprAsync(string filePath)
+        {
+            throw new NotImplementedException();
         }
     }
 }
