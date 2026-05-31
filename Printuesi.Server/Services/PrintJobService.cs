@@ -727,5 +727,97 @@ namespace Printuesi.Server.Services
 
             return response;
         }
+
+        /// <summary>
+        /// Creates a print job from a manual selection of labels and quantities.
+        /// </summary>
+        public async Task<PrintJobResponse> CreateManualJobAsync(
+    CreateManualJobRequest request, string createdByUserID)
+        {
+            if (request == null || !request.Items.Any())
+                throw new ArgumentException("At least one item is required.");
+
+            var client = await _db.Clients.FirstOrDefaultAsync(c => c.ClientID == request.ClientID);
+            if (client == null)
+                throw new InvalidOperationException($"Client '{request.ClientID}' not found.");
+
+            var productionDate = request.ProductionDate?.ToUniversalTime() ?? DateTime.UtcNow;
+            var lotNumber = LotNumberHelper.Generate(productionDate);
+
+            var job = new PrintJobs
+            {
+                PrintJobID = ID_Generator.PrintJob(),
+                ClientID = client.ClientID,
+                Status = Status.Pending,
+                CreatedAt = productionDate,
+                CompletedAt = null,
+                CreatedBy = createdByUserID,
+                Notes = "Manual order"
+            };
+
+            _db.PrintJobs.Add(job);
+
+            var scannedItems = new List<OrderLineItem>();
+
+            foreach (var item in request.Items)
+            {
+                if (item.Quantity <= 0)
+                    throw new ArgumentException($"Quantity must be greater than 0.");
+
+                var template = await _db.LabelTemplates.FirstOrDefaultAsync(t =>
+                    t.LabelID == item.TemplateID &&
+                    t.ClientID == client.ClientID);
+
+                if (template == null)
+                    throw new InvalidOperationException(
+                        $"Template '{item.TemplateID}' not found for this client.");
+
+                var expiryDate = productionDate.AddMonths(template.ExpiryOffsetMonths);
+                var expiryFormatted = expiryDate.ToString(template.DateFormat);
+
+                var clientFolder = GetClientFolderName(client.Name);
+                var fileName = $"{template.LabelName} {clientFolder.ToUpper()} {template.PaperSize}.pdf";
+                var labelPath = Path.Combine(_labelsBasePath, clientFolder, fileName);
+
+                if (!File.Exists(labelPath))
+                    throw new InvalidOperationException(
+                        $"Label file not found: {labelPath}");
+
+                var obj = new PrintJobObjects
+                {
+                    PrintJobObjectID = ID_Generator.PrintJobObject(),
+                    PrintJobID = job.PrintJobID,
+                    ProductCode = template.LabelName,
+                    LabelID = template.LabelID,
+                    Quantity_Requested = item.Quantity,
+                    Quantity_Printed = 0,
+                    Expiry_Date = expiryFormatted,
+                    Lot_Num = lotNumber,
+                    Status = Status.Pending
+                };
+
+                _db.PrintJobObjects.Add(obj);
+
+                scannedItems.Add(new OrderLineItem
+                {
+                    ProductCode = template.LabelName,
+                    ProductName = template.LabelName,
+                    Quantity = item.Quantity,
+                    PaperSize = template.PaperSize
+                });
+
+                _logger.LogInformation(
+                    "Manual: Added {Code} × {Qty} | {Size} | Expiry: {Expiry} | Lot: {Lot}",
+                    template.LabelName, item.Quantity, template.PaperSize, expiryFormatted, lotNumber);
+            }
+
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation("Manual PrintJob {JobID} created for {Client} with {Count} items",
+                job.PrintJobID, client.Name, request.Items.Count);
+
+            return await BuildResponse(job, client, scannedItems, new List<string>());
+        }
+
     }
 }
