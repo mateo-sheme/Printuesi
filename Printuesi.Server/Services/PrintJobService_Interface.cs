@@ -46,8 +46,6 @@ namespace Printuesi.Server.Services
         /// Cancel a print job
         /// </summary>
         Task<bool> CancelPrintJobAsync(string printJobID);
-
-        Task<PrintJobResponse> CreateManualJobAsync(CreateManualJobRequest request, string createdByUserID);
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────────────
@@ -102,25 +100,5 @@ namespace Printuesi.Server.Services
         public bool NeedsPaperChange { get; set; }     // user must change paper
         public bool NeedsTestConfirm { get; set; }     // user must confirm test print
         public string? Message { get; set; }            // human readable status message
-
     }
-
-    public class CreateManualJobRequest
-    {
-        public string ClientID { get; set; } = string.Empty;
-        public List<ManualJobItem> Items { get; set; } = new();
-        public DateTime? ProductionDate { get; set; } // defaults to today if null
-    }
-
-    public class ManualJobItem
-    {
-        public string TemplateID { get; set; } = string.Empty;
-        public int Quantity { get; set; }
-    }
-
-    // New interface methods to add:
-    // Task<List<ManualLabelItem>> GetAvailableLabelsAsync(string clientID);
-    // Task<PrintJobResponse> CreateManualJobAsync(CreateManualJobRequest request, string createdByUserID);
-
-
 }

@@ -224,39 +224,5 @@ namespace Printuesi.Server.Controllers
                 return StatusCode(500, new { message = "Error cancelling print job.", error = ex.Message });
             }
         }
-
-      
-        [HttpPost("create-manual")]
-        public async Task<ActionResult<PrintJobResponse>> CreateManual(
-            [FromBody] CreateManualJobRequest request,
-            [FromQuery] string createdByUserID)
-        {
-            try
-            {
-                if (request == null)
-                    return BadRequest(new { message = "Request body is required." });
-
-                if (string.IsNullOrWhiteSpace(createdByUserID))
-                    return BadRequest(new { message = "createdByUserID is required." });
-
-                var result = await _printJobService.CreateManualJobAsync(request, createdByUserID);
-                return CreatedAtAction(nameof(GetPrintJob),
-                    new { printJobID = result.PrintJobID }, result);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating manual print job");
-                return StatusCode(500, new { message = "Error creating manual job.", error = ex.Message });
-            }
-        }
-
     }
 }
