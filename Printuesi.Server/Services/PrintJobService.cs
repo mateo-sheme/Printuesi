@@ -15,12 +15,18 @@ namespace Printuesi.Server.Services
         private readonly IConfiguration _config;
         private readonly ILogger<PrintJobService> _logger;
         private readonly IWebHostEnvironment _env;
+
         private readonly string _labelsBasePath;
         private readonly string _outputBasePath;
         private readonly string _driversBasePath;
 
-        // Paper sizes that require a test print before batch
-        private static readonly PaperSize[] TestPrintRequired = { PaperSize.Mini, PaperSize.Rrethi };
+        // Mini and Rrethi are problematic, so test print is mandatory for them.
+        // Normale and Prodhim can also test, but it is optional.
+        private static readonly PaperSize[] TestPrintRequired =
+        {
+            PaperSize.Mini,
+            PaperSize.Rrethi
+        };
 
         public PrintJobService(
             ApplicationDbContext db,
@@ -43,30 +49,41 @@ namespace Printuesi.Server.Services
                 ?? Path.Combine(env.WebRootPath, "labels");
 
             _outputBasePath = Path.Combine(env.WebRootPath, "labels_output");
-            _driversBasePath = Path.Combine(env.WebRootPath, "drivers");
+
+            var configuredDriverBasePath = config["Drivers:BasePath"] ?? "drivers";
+
+            _driversBasePath = Path.IsPathRooted(configuredDriverBasePath)
+                ? configuredDriverBasePath
+                : Path.Combine(env.WebRootPath, configuredDriverBasePath);
 
             Directory.CreateDirectory(_outputBasePath);
             Directory.CreateDirectory(_driversBasePath);
         }
 
-        // ── Step 1: Create job from order PDF ────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Step 1: Create job from order PDF
+        // ─────────────────────────────────────────────────────────────────────
 
         public async Task<PrintJobResponse> CreateFromOrderAsync(IFormFile orderPdf, string createdByUserID)
         {
             var scanResult = await _orderScan.ScanOrderAsync(orderPdf);
 
             if (!scanResult.Items.Any())
+            {
                 throw new InvalidOperationException(
                     "No recognizable products found in the order PDF. " +
                     $"Unrecognized codes: {string.Join(", ", scanResult.UnrecognizedCodes)}");
+            }
 
             var client = await _db.Clients.FirstOrDefaultAsync(c =>
                 c.Name.ToLower() == scanResult.ClientName.ToLower());
 
             if (client == null)
+            {
                 throw new InvalidOperationException(
                     $"Client '{scanResult.ClientName}' not found in database. " +
                     "Please create the client first.");
+            }
 
             var productionDate = DateTime.UtcNow;
             var lotNumber = LotNumberHelper.Generate(productionDate);
@@ -84,17 +101,22 @@ namespace Printuesi.Server.Services
 
             _db.PrintJobs.Add(job);
 
-            var jobObjects = new List<PrintJobObjects>();
-
             foreach (var item in scanResult.Items)
             {
                 var template = await _db.LabelTemplates.FirstOrDefaultAsync(t =>
                     t.ClientID == client.ClientID &&
                     t.PaperSize == item.PaperSize);
 
-                var offsetMonths = template?.ExpiryOffsetMonths ?? 12;
+                var offsetMonths = template?.ExpiryOffsetMonths > 0
+                    ? template.ExpiryOffsetMonths
+                    : 12;
+
                 var expiryDate = productionDate.AddMonths(offsetMonths);
-                var dateFormat = template?.DateFormat ?? "MM/yyyy";
+
+                var dateFormat = string.IsNullOrWhiteSpace(template?.DateFormat)
+                    ? "dd/MM/yyyy"
+                    : template.DateFormat;
+
                 var expiryFormatted = expiryDate.ToString(dateFormat);
 
                 var obj = new PrintJobObjects
@@ -102,7 +124,7 @@ namespace Printuesi.Server.Services
                     PrintJobObjectID = ID_Generator.PrintJobObject(),
                     PrintJobID = job.PrintJobID,
                     ProductCode = item.ProductCode,
-                    LabelID = template?.LabelID ?? null,
+                    LabelID = template?.LabelID,
                     Quantity_Requested = item.Quantity,
                     Quantity_Printed = 0,
                     Expiry_Date = expiryFormatted,
@@ -110,110 +132,154 @@ namespace Printuesi.Server.Services
                     Status = Status.Pending
                 };
 
-                jobObjects.Add(obj);
                 _db.PrintJobObjects.Add(obj);
 
                 _logger.LogInformation(
                     "Added {Code} × {Qty} | {Size} | Expiry: {Expiry} | Lot: {Lot}",
-                    item.ProductCode, item.Quantity, item.PaperSize, expiryFormatted, lotNumber);
+                    item.ProductCode,
+                    item.Quantity,
+                    item.PaperSize,
+                    expiryFormatted,
+                    lotNumber);
             }
 
             await _db.SaveChangesAsync();
 
-            _logger.LogInformation("PrintJob {JobID} created for {Client} with {Count} items",
-                job.PrintJobID, client.Name, jobObjects.Count);
+            _logger.LogInformation(
+                "PrintJob {JobID} created for {Client}",
+                job.PrintJobID,
+                client.Name);
 
-            return await BuildResponse(job, client, scanResult.Items, scanResult.UnrecognizedCodes);
+            var savedJob = await _db.PrintJobs
+                .Include(j => j.PrintJobObjects)
+                    .ThenInclude(o => o.LabelTemplate)
+                .Include(j => j.Client)
+                .FirstOrDefaultAsync(j => j.PrintJobID == job.PrintJobID);
+
+            if (savedJob == null)
+                throw new InvalidOperationException($"Created print job '{job.PrintJobID}' could not be reloaded.");
+
+            var response = await BuildResponseFromDb(savedJob);
+            response.UnrecognizedProducts = scanResult.UnrecognizedCodes;
+
+            return response;
         }
 
-        // ── Step 2: Get job ───────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Step 2: Get job
+        // ─────────────────────────────────────────────────────────────────────
 
         public async Task<PrintJobResponse?> GetPrintJobAsync(string printJobID)
         {
             var job = await _db.PrintJobs
                 .Include(j => j.PrintJobObjects)
+                    .ThenInclude(o => o.LabelTemplate)
                 .Include(j => j.Client)
                 .FirstOrDefaultAsync(j => j.PrintJobID == printJobID);
 
-            if (job == null) return null;
+            if (job == null)
+                return null;
+
             return await BuildResponseFromDb(job);
         }
 
-        // ── Step 3: Start a paper size group ─────────────────────────────────
-        // Logic:
-        // 1. Check printer is online
-        // 2. Check if paper change needed
-        //    - If yes: return NeedsPaperChange = true (frontend prompts user)
-        //    - If no: continue
-        // 3. Send driver file for this paper size
-        // 4. If Mini or Rrethi: send 1 test copy, return NeedsTestConfirm = true
-        // 5. If Normale or Prodhim: print all copies directly
-
-        public async Task<PrintGroupResult> StartGroupAsync(string printJobID, PaperSize paperSize)
-        {
-            var job = await LoadJob(printJobID);
-            var result = new PrintGroupResult { PaperSize = paperSize };
-
-            // Check printer is online
-            var printerOnline = await _printerService.TestConnectionAsync();
-            if (!printerOnline)
-            {
-                result.Success = false;
-                result.Errors.Add("Printer is offline. Please check the connection.");
-                return result;
-            }
-
-            // Check current paper state
-            var printerState = await GetOrCreatePrinterState();
-            var needsPaperChange = printerState.CurrentPaperSize != paperSize;
-
-            if (needsPaperChange)
-            {
-                // Send driver first, then ask user to change paper
-                await SendDriver(paperSize, result);
-
-                if (result.Errors.Any())
-                    return result; // driver send failed
-
-                // Update printer state
-                printerState.CurrentPaperSize = paperSize;
-                printerState.LastUpdated = DateTime.UtcNow;
-                _db.PrinterState.Update(printerState);
-                await _db.SaveChangesAsync();
-
-                result.NeedsPaperChange = true;
-                result.Success = true;
-                result.Message = $"Please load {paperSize} paper and confirm when ready.";
-                return result;
-            }
-
-            // Same paper already loaded — proceed directly
-            return await ExecuteGroup(job, paperSize, result);
-        }
-
-        // ── Step 4a: User confirmed paper changed ────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Step 3: User confirms paper changed
+        // This sends the driver and stores current paper state.
+        // It does NOT print.
+        // ─────────────────────────────────────────────────────────────────────
 
         public async Task<PrintGroupResult> ConfirmPaperChangeAsync(string printJobID, PaperSize paperSize)
         {
             var job = await LoadJob(printJobID);
-            var result = new PrintGroupResult { PaperSize = paperSize };
 
-            // Update printer state
+            var result = new PrintGroupResult
+            {
+                PaperSize = paperSize
+            };
+
+            var printerOnline = await _printerService.TestConnectionAsync();
+
+            if (!printerOnline)
+            {
+                result.Success = false;
+                result.Errors.Add("Printer is offline. Please check the connection.");
+                result.Message = "Printer is offline.";
+                return result;
+            }
+
+            await SendDriver(paperSize, result);
+
+            if (result.Errors.Any())
+            {
+                result.Success = false;
+                result.Message = $"Failed to prepare {paperSize} paper.";
+                return result;
+            }
+
             var printerState = await GetOrCreatePrinterState();
             printerState.CurrentPaperSize = paperSize;
             printerState.LastUpdated = DateTime.UtcNow;
+
+            job.Status = Status.In_progress;
+
             _db.PrinterState.Update(printerState);
+            _db.PrintJobs.Update(job);
+
+            // If the paper is confirmed again, old test result should no longer count.
+            ClearTestPrinted(printJobID, paperSize);
+
             await _db.SaveChangesAsync();
 
-            return await ExecuteGroup(job, paperSize, result);
+            result.Success = true;
+            result.NeedsPaperChange = false;
+            result.NeedsTestConfirm = TestPrintRequired.Contains(paperSize);
+
+            result.Message = TestPrintRequired.Contains(paperSize)
+                ? $"{paperSize} paper confirmed. Driver sent. Test print is required before starting the group."
+                : $"{paperSize} paper confirmed. Driver sent. Test print is optional; you may start the group.";
+
+            return result;
         }
 
-        // ── Step 4b: User confirmed test print is ok ─────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Step 4: Optional/mandatory test print
+        // Mini/Rrethi: mandatory before StartGroup
+        // Normale/Prodhim: optional
+        // Test print does NOT count as production.
+        // ─────────────────────────────────────────────────────────────────────
 
-        public async Task<PrintGroupResult> ConfirmTestPrintAsync(string printJobID, PaperSize paperSize)
+        public async Task<PrintGroupResult> PrintTestAsync(string printJobID, PaperSize paperSize, string? kg = null)
         {
             var job = await LoadJob(printJobID);
-            var result = new PrintGroupResult { PaperSize = paperSize };
+
+            var result = new PrintGroupResult
+            {
+                PaperSize = paperSize
+            };
+
+            if (!ValidateKgIfRequired(job, kg, result))
+                return result;
+
+            var printerOnline = await _printerService.TestConnectionAsync();
+
+            if (!printerOnline)
+            {
+                result.Success = false;
+                result.Errors.Add("Printer is offline. Please check the connection.");
+                result.Message = "Printer is offline.";
+                return result;
+            }
+
+            var printerState = await GetOrCreatePrinterState();
+
+            if (printerState.CurrentPaperSize != paperSize)
+            {
+                result.Success = false;
+                result.NeedsPaperChange = true;
+                result.Message = $"Please confirm {paperSize} paper first.";
+                return result;
+            }
 
             var itemsForGroup = GetPendingItems(job, paperSize);
 
@@ -222,132 +288,127 @@ namespace Printuesi.Server.Services
 
             var firstItem = itemsForGroup.First();
 
-            foreach (var item in itemsForGroup)
+            var prepared = await EnsureFilledPdfAsync(job, paperSize, firstItem, result, kg);
+
+            if (!prepared)
+                return result;
+
+            var outputPath = GetOutputPath(job.PrintJobID, paperSize, firstItem.PrintJobObjectID);
+
+            var sent = await _printerService.SendFileLprAsync(outputPath);
+
+            if (!sent)
             {
-                var outputPath = GetOutputPath(printJobID, paperSize, item.PrintJobObjectID);
-
-                if (!File.Exists(outputPath))
-                {
-                    result.Errors.Add($"Filled PDF not found for {item.PrintJobObjectID} — re-filling.");
-
-                    var templatePath = ResolveTemplatePath(job.Client.Name, item);
-                    if (string.IsNullOrEmpty(templatePath))
-                    {
-                        result.Errors.Add($"Label file not found for {item.PrintJobObjectID}");
-                        result.ItemsFailed++;
-                        continue;
-                    }
-
-                    var useWhiteText = ClientUsesWhiteText(job.Client.Name);
-                    var filled = await _pdfService.FillPdfPlaceholdersAsync(
-                        templatePath,
-                        new Dictionary<string, string>
-                        {
-                    { "EXPIRY_DATE", item.Expiry_Date },
-                    { "LOT_NUMBER", item.Lot_Num ?? string.Empty }
-                        },
-                        outputPath,
-                        useWhiteText);
-
-                    if (!filled)
-                    {
-                        result.Errors.Add($"Failed to fill PDF for {item.PrintJobObjectID}");
-                        result.ItemsFailed++;
-                        continue;
-                    }
-                }
-
-                // First item: test copy already counts as 1 production copy → send qty - 1
-                // All other items: send full quantity
-                var copiesToPrint = item.PrintJobObjectID == firstItem.PrintJobObjectID
-                    ? item.Quantity_Requested - 1
-                    : item.Quantity_Requested;
-
-                for (int i = 0; i < copiesToPrint; i++)
-                {
-                    var sent = await _printerService.SendFileLprAsync(outputPath);
-                    if (!sent)
-                        result.Errors.Add($"Failed to send copy {i + 1} of {item.ProductCode}");
-                }
-
-                item.Status = Status.Completed;
-                item.Quantity_Printed = item.Quantity_Requested;
-                _db.PrintJobObjects.Update(item);
-                result.ItemsPrinted++;
+                result.Success = false;
+                result.ItemsFailed++;
+                result.Errors.Add($"Failed to send test copy for {firstItem.ProductCode}");
+                result.Message = "Test print failed.";
+                return result;
             }
 
-            await FinalizeJob(job, result);
-            result.Success = result.ItemsFailed == 0;
+            MarkTestPrinted(printJobID, paperSize);
+
+            job.Status = Status.In_progress;
+            _db.PrintJobs.Update(job);
+            await _db.SaveChangesAsync();
+
+            result.Success = true;
+            result.ItemsPrinted = 1;
+            result.NeedsPaperChange = false;
+            result.NeedsTestConfirm = false;
+
+            result.Message = TestPrintRequired.Contains(paperSize)
+                ? $"Test label sent for {firstItem.ProductCode}. If alignment is good, click 'Nis grupin'."
+                : $"Optional test label sent for {firstItem.ProductCode}. You may now start the group.";
+
             return result;
         }
 
-        // ── Step 4c: User said test print NOT ok → reprint 1 test copy ───────
+        public async Task<PrintGroupResult> ReprintTestAsync(string printJobID, PaperSize paperSize, string? kg = null)
+        {
+            var result = await PrintTestAsync(printJobID, paperSize, kg);
 
-        public async Task<PrintGroupResult> ReprintTestAsync(string printJobID, PaperSize paperSize)
+            if (result.Success)
+                result.Message = "Test label reprinted. If alignment is good, click 'Nis grupin'.";
+
+            return result;
+        }
+
+        // Kept for compatibility with your existing interface/controller.
+        // New frontend should use StartGroupAsync after test is printed.
+        public async Task<PrintGroupResult> ConfirmTestPrintAsync(string printJobID, PaperSize paperSize, string? kg = null)
+        {
+            return await StartGroupAsync(printJobID, paperSize, kg);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Step 5: Start production group
+        // Mini/Rrethi require a previous successful test.
+        // Normale/Prodhim can start directly after paper confirmation.
+        // ─────────────────────────────────────────────────────────────────────
+
+        public async Task<PrintGroupResult> StartGroupAsync(string printJobID, PaperSize paperSize, string? kg = null)
         {
             var job = await LoadJob(printJobID);
-            var result = new PrintGroupResult { PaperSize = paperSize };
 
-            var itemsForGroup = GetPendingItems(job, paperSize);
-
-            if (!itemsForGroup.Any())
-                throw new InvalidOperationException($"No pending items for {paperSize}.");
-
-            // Send 1 copy of each item again
-            foreach (var item in itemsForGroup)
+            var result = new PrintGroupResult
             {
-                var firstItem = itemsForGroup.First();
-                var outputPath = GetOutputPath(printJobID, paperSize, firstItem.PrintJobObjectID);
-                var useWhiteText = ClientUsesWhiteText(job.Client.Name);
+                PaperSize = paperSize
+            };
 
-                if (!File.Exists(outputPath))
-                {
-                    result.Errors.Add($"Filled PDF not found for reprint — re-filling {item.PrintJobObjectID}");
-                    var templatePath = ResolveTemplatePath(job.Client.Name, item);
-                    if (string.IsNullOrEmpty(templatePath))
-                    {
-                        result.ItemsFailed++;
-                        continue;
-                    }
+            if (!ValidateKgIfRequired(job, kg, result))
+                return result;
 
-                    await _pdfService.FillPdfPlaceholdersAsync(
-                        templatePath,
-                        new Dictionary<string, string>
-                        {
-                            { "EXPIRY_DATE", item.Expiry_Date },
-                            { "LOT_NUMBER", item.Lot_Num ?? string.Empty }
-                        },
-                        outputPath,
-                        useWhiteText);
-                }
+            var printerOnline = await _printerService.TestConnectionAsync();
 
-                var sent = await _printerService.SendFileLprAsync(outputPath);
-                if (!sent)
-                    result.Errors.Add($"Failed to send retest for {firstItem.PrintJobObjectID}");
-                else
-                    result.ItemsPrinted++;
+            if (!printerOnline)
+            {
+                result.Success = false;
+                result.Errors.Add("Printer is offline. Please check the connection.");
+                result.Message = "Printer is offline.";
+                return result;
             }
 
-            // Still waiting for test confirmation
-            result.NeedsTestConfirm = true;
-            result.Success = result.ItemsFailed == 0;
-            result.Message = "Test copy reprinted. Please confirm alignment is correct, or cancel the job.";
-            return result;
+            var printerState = await GetOrCreatePrinterState();
+
+            if (printerState.CurrentPaperSize != paperSize)
+            {
+                result.Success = false;
+                result.NeedsPaperChange = true;
+                result.Message = $"Please load {paperSize} paper and click 'Kam ndërruar letrën' first.";
+                return result;
+            }
+
+            if (TestPrintRequired.Contains(paperSize) && !HasTestPrinted(printJobID, paperSize))
+            {
+                result.Success = false;
+                result.NeedsTestConfirm = true;
+                result.Message = $"{paperSize} requires a test print before starting the group.";
+                return result;
+            }
+
+            return await ExecuteGroup(job, paperSize, result, kg);
         }
 
-        // ── Other methods ─────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Other methods
+        // ─────────────────────────────────────────────────────────────────────
 
         public async Task<List<PrintJobResponse>> GetAllPrintJobsAsync(Status? status = null)
         {
             var query = _db.PrintJobs
                 .Include(j => j.PrintJobObjects)
+                    .ThenInclude(o => o.LabelTemplate)
                 .Include(j => j.Client)
                 .AsQueryable();
 
             if (status.HasValue)
                 query = query.Where(j => j.Status == status.Value);
 
-            var jobs = await query.OrderByDescending(j => j.CreatedAt).ToListAsync();
+            var jobs = await query
+                .OrderByDescending(j => j.CreatedAt)
+                .ToListAsync();
+
             var responses = new List<PrintJobResponse>();
 
             foreach (var job in jobs)
@@ -359,27 +420,32 @@ namespace Printuesi.Server.Services
         public async Task<bool> CancelPrintJobAsync(string printJobID)
         {
             var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.PrintJobID == printJobID);
-            if (job == null) return false;
+
+            if (job == null)
+                return false;
 
             if (job.Status == Status.Completed)
                 throw new InvalidOperationException("Cannot cancel a completed job.");
 
             job.Status = Status.Cancelled;
+
             _db.PrintJobs.Update(job);
             await _db.SaveChangesAsync();
 
-            // Clean up output files
             CleanupJobOutput(printJobID);
+
             return true;
         }
 
-        // ── Core execution ────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Core execution
+        // ─────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Executes a group — fills PDFs, sends test or full batch depending on paper size.
-        /// </summary>
         private async Task<PrintGroupResult> ExecuteGroup(
-            PrintJobs job, PaperSize paperSize, PrintGroupResult result)
+            PrintJobs job,
+            PaperSize paperSize,
+            PrintGroupResult result,
+            string? kg)
         {
             job.Status = Status.In_progress;
             _db.PrintJobs.Update(job);
@@ -390,113 +456,180 @@ namespace Printuesi.Server.Services
             if (!itemsForGroup.Any())
                 throw new InvalidOperationException($"No pending items for {paperSize}.");
 
-            var outputDir = Path.Combine(_outputBasePath, job.PrintJobID, paperSize.ToString());
-            Directory.CreateDirectory(outputDir);
+            Directory.CreateDirectory(Path.Combine(_outputBasePath, job.PrintJobID, paperSize.ToString()));
 
-            // Fill all PDFs first
             foreach (var item in itemsForGroup)
             {
-                var templatePath = ResolveTemplatePath(job.Client.Name, item);
-                if (string.IsNullOrEmpty(templatePath))
+                var prepared = await EnsureFilledPdfAsync(job, paperSize, item, result, kg);
+
+                if (!prepared)
                 {
-                    result.Errors.Add($"Label file not found for {item.ProductCode} ({item.PrintJobObjectID})");
                     result.ItemsFailed++;
                     continue;
                 }
 
                 var outputPath = GetOutputPath(job.PrintJobID, paperSize, item.PrintJobObjectID);
-                var useWhiteText = ClientUsesWhiteText(job.Client.Name);
 
-                var filled = await _pdfService.FillPdfPlaceholdersAsync(
-                    templatePath,
-                    new Dictionary<string, string>
-                    {
-                        { "EXPIRY_DATE", item.Expiry_Date },
-                        { "LOT_NUMBER", item.Lot_Num ?? string.Empty }
-                    },
-                    outputPath,
-                    useWhiteText);
+                var copiesRemaining = Math.Max(0, item.Quantity_Requested - item.Quantity_Printed);
+                var sentCopies = 0;
 
-                if (!filled)
-                {
-                    result.Errors.Add($"Failed to fill PDF for {item.ProductCode}");
-                    result.ItemsFailed++;
-                }
-            }
-
-            if (result.ItemsFailed > 0)
-            {
-                result.Success = false;
-                return result;
-            }
-
-            // Mini and Rrethi: send 1 test copy per item, wait for confirmation
-            if (TestPrintRequired.Contains(paperSize))
-            {
-                var firstItem = itemsForGroup.First();
-                var outputPath = GetOutputPath(job.PrintJobID, paperSize, firstItem.PrintJobObjectID);
-
-                var sent = await _printerService.SendFileLprAsync(outputPath);
-                if (!sent)
-                    result.Errors.Add($"Failed to send test copy for {firstItem.ProductCode}");
-                else
-                    result.ItemsPrinted++;
-
-                result.NeedsTestConfirm = true;
-                result.Success = result.Errors.Count == 0;
-                result.Message = $"Test copy of {firstItem.ProductCode} sent. Please confirm alignment is correct.";
-                return result;
-            }
-
-            // Normale and Prodhim: print all copies directly
-            foreach (var item in itemsForGroup)
-            {
-                var outputPath = GetOutputPath(job.PrintJobID, paperSize, item.PrintJobObjectID);
-                if (!File.Exists(outputPath)) continue;
-
-                for (int copy = 0; copy < item.Quantity_Requested; copy++)
+                for (var copy = 0; copy < copiesRemaining; copy++)
                 {
                     var sent = await _printerService.SendFileLprAsync(outputPath);
-                    if (!sent)
+
+                    if (sent)
+                    {
+                        sentCopies++;
+                        result.ItemsPrinted++;
+                    }
+                    else
+                    {
                         result.Errors.Add($"Failed to send copy {copy + 1} of {item.ProductCode}");
+                    }
                 }
 
-                item.Status = Status.Completed;
-                item.Quantity_Printed = item.Quantity_Requested;
+                item.Quantity_Printed += sentCopies;
+
+                if (item.Quantity_Printed >= item.Quantity_Requested)
+                {
+                    item.Quantity_Printed = item.Quantity_Requested;
+                    item.Status = Status.Completed;
+                }
+
                 _db.PrintJobObjects.Update(item);
-                result.ItemsPrinted++;
+                await _db.SaveChangesAsync();
             }
 
             await FinalizeJob(job, result);
-            result.Success = result.ItemsFailed == 0;
+
+            result.Success = result.ItemsFailed == 0 && !result.Errors.Any();
+
+            if (result.Success && string.IsNullOrWhiteSpace(result.Message))
+                result.Message = "Group printed successfully.";
+
             return result;
+        }
+
+        private async Task<bool> EnsureFilledPdfAsync(
+        PrintJobs job,
+        PaperSize paperSize,
+        PrintJobObjects item,
+        PrintGroupResult result,
+        string? kg = null)
+        {
+            var outputPath = GetOutputPath(job.PrintJobID, paperSize, item.PrintJobObjectID);
+
+            var normalizedKg = NormalizeKg(kg);
+
+            // If KG is provided, regenerate the temporary PDF.
+            // This prevents printing an old cached file with the wrong KG.
+            if (File.Exists(outputPath) && string.IsNullOrWhiteSpace(normalizedKg))
+                return true;
+
+            if (File.Exists(outputPath) && !string.IsNullOrWhiteSpace(normalizedKg))
+                File.Delete(outputPath);
+
+            if (File.Exists(outputPath))
+                return true;
+
+            var templatePath = ResolveTemplatePath(job.Client.Name, item);
+
+            if (string.IsNullOrEmpty(templatePath))
+            {
+                result.Success = false;
+                result.Errors.Add($"Label file not found for {item.ProductCode} ({item.PrintJobObjectID})");
+                result.Message = $"Label file not found for {item.ProductCode}.";
+                return false;
+            }
+
+            var useWhiteText = ClientUsesWhiteText(job.Client.Name);
+
+            var filled = await _pdfService.FillPdfPlaceholdersAsync(
+                templatePath,
+                new Dictionary<string, string>
+                {
+                    { "EXPIRY_DATE", item.Expiry_Date },
+                    { "LOT_NUMBER", item.Lot_Num ?? string.Empty }
+                },
+                outputPath,
+                useWhiteText);
+
+            if (!filled)
+            {
+                result.Success = false;
+                result.Errors.Add($"Failed to fill PDF for {item.ProductCode}");
+                result.Message = $"Failed to prepare label for {item.ProductCode}.";
+                return false;
+            }
+
+            return true;
         }
 
         private async Task SendDriver(PaperSize paperSize, PrintGroupResult result)
         {
-            var driverPath = Path.Combine(_driversBasePath, $"{paperSize}.bak");
+            var driverPath = ResolveDriverPath(paperSize);
 
-            if (!File.Exists(driverPath))
+            if (string.IsNullOrWhiteSpace(driverPath))
             {
-                _logger.LogWarning("Driver file not found for {PaperSize} at {Path} — continuing without it",
-                    paperSize, driverPath);
+                result.Success = false;
+                result.Errors.Add($"Driver file not found for {paperSize} in '{_driversBasePath}'.");
+                _logger.LogWarning("Driver file not found for {PaperSize} in {Path}", paperSize, _driversBasePath);
                 return;
             }
 
             var sent = await _printerService.SendDriverAsync(driverPath);
+
             if (!sent)
             {
-                result.Errors.Add($"Failed to send driver for {paperSize}.");
                 result.Success = false;
+                result.Errors.Add($"Failed to send driver for {paperSize}.");
+                return;
+            }
+
+            await Task.Delay(1500);
+
+            _logger.LogInformation("Driver sent for {PaperSize}: {Driver}", paperSize, driverPath);
+        }
+
+        private string ResolveDriverPath(PaperSize paperSize)
+        {
+            var configuredFileName = _config[$"Drivers:Files:{paperSize}"];
+
+            var candidates = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(configuredFileName))
+                candidates.Add(configuredFileName);
+
+            candidates.Add($"{paperSize}.bak");
+            candidates.Add($"{paperSize}.bal");
+
+            if (paperSize == PaperSize.Rrethi)
+            {
+                candidates.Add("Etiketa Rreth.bak");
+                candidates.Add("Etiketa Rrethi.bak");
+                candidates.Add("Etiketa Rreth.bal");
+                candidates.Add("Etiketa Rrethi.bal");
             }
             else
             {
-                await Task.Delay(1500); // give printer time to apply settings
-                _logger.LogInformation("Driver sent for {PaperSize}", paperSize);
+                candidates.Add($"Etiketa {paperSize}.bak");
+                candidates.Add($"Etiketa {paperSize}.bal");
             }
+
+            foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var fullPath = Path.Combine(_driversBasePath, candidate);
+
+                if (File.Exists(fullPath))
+                    return fullPath;
+            }
+
+            return string.Empty;
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
+        // Helpers
+        // ─────────────────────────────────────────────────────────────────────
 
         private async Task<PrintJobs> LoadJob(string printJobID)
         {
@@ -527,71 +660,99 @@ namespace Printuesi.Server.Services
         private List<PrintJobObjects> GetPendingItems(PrintJobs job, PaperSize paperSize)
         {
             return job.PrintJobObjects
-                .Where(o => o.Status == Status.Pending &&
-                            (o.LabelTemplate?.PaperSize == paperSize ||
-                             ResolveItemPaperSize(o) == paperSize))
+                .Where(o =>
+                    o.Status == Status.Pending &&
+                    ResolveItemPaperSize(o) == paperSize)
                 .ToList();
         }
 
-        /// <summary>
-        /// Resolves paper size for an item — from template first, then from ProductSizeMap via config.
-        /// </summary>
         private PaperSize ResolveItemPaperSize(PrintJobObjects item)
         {
             if (item.LabelTemplate != null)
                 return item.LabelTemplate.PaperSize;
 
-            // Fall back to config lookup by product code
             var section = _config.GetSection("ProductSizeMap");
+
             foreach (var sizeSection in section.GetChildren())
             {
-                if (!Enum.TryParse<PaperSize>(sizeSection.Key, true, out var paperSize))
+                if (!Enum.TryParse<PaperSize>(sizeSection.Key, ignoreCase: true, out var paperSize))
                     continue;
+
                 var codes = sizeSection.Get<string[]>() ?? Array.Empty<string>();
+
                 if (codes.Any(c => c.Equals(item.ProductCode, StringComparison.OrdinalIgnoreCase)))
                     return paperSize;
             }
 
-            return PaperSize.Normale; // safe default
+            return PaperSize.Normale;
         }
 
-        /// <summary>
-        /// Resolves the label PDF path.
-        /// Priority: LabelTemplate.PdfPath → NFS share convention
-        /// </summary>
         private string ResolveTemplatePath(string clientName, PrintJobObjects item)
         {
             var paperSize = ResolveItemPaperSize(item);
+
+            if (item.LabelTemplate != null &&
+                !string.IsNullOrWhiteSpace(item.LabelTemplate.PdfPath))
+            {
+                var templatePath = item.LabelTemplate.PdfPath;
+
+                if (!Path.IsPathRooted(templatePath))
+                    templatePath = Path.Combine(_labelsBasePath, templatePath);
+
+                if (File.Exists(templatePath))
+                    return templatePath;
+            }
+
             var clientFolder = GetClientFolderName(clientName);
-            var fileName = $"{item.ProductCode} {clientFolder.ToUpper()} {paperSize}.pdf";
-            var path = Path.Combine(_labelsBasePath, clientFolder, fileName);
 
-            if (File.Exists(path))
-                return path;
+            var candidates = new[]
+            {
+                Path.Combine(_labelsBasePath, clientFolder, $"{item.ProductCode} {clientFolder} {paperSize}.pdf"),
+                Path.Combine(_labelsBasePath, clientFolder, $"{item.ProductCode} {clientFolder.ToUpper()} {paperSize}.pdf"),
+                Path.Combine(_labelsBasePath, clientFolder, $"{item.ProductCode} {clientFolder.ToLower()} {paperSize}.pdf")
+            };
 
-            _logger.LogWarning("Label file not found at: {Path}", path);
+            foreach (var path in candidates)
+            {
+                if (File.Exists(path))
+                    return path;
+            }
+
+            _logger.LogWarning(
+                "Label file not found for {Code}. Tried: {Paths}",
+                item.ProductCode,
+                string.Join(" | ", candidates));
+
             return string.Empty;
         }
 
         private string GetOutputPath(string printJobID, PaperSize paperSize, string itemID)
         {
             var outputDir = Path.Combine(_outputBasePath, printJobID, paperSize.ToString());
+
             Directory.CreateDirectory(outputDir);
+
             return Path.Combine(outputDir, $"{itemID}.pdf");
         }
 
         private async Task FinalizeJob(PrintJobs job, PrintGroupResult result)
         {
             var allItems = job.PrintJobObjects.ToList();
+
             var allDone = allItems.All(o =>
-                o.Status == Status.Completed || o.Status == Status.Cancelled);
+                o.Status == Status.Completed ||
+                o.Status == Status.Cancelled);
 
             if (allDone)
             {
                 job.Status = Status.Completed;
                 job.CompletedAt = DateTime.UtcNow;
                 result.JobCompleted = true;
+                result.NextPaperSize = null;
+                result.Message = "Print job completed.";
+
                 CleanupJobOutput(job.PrintJobID);
+
                 _logger.LogInformation("PrintJob {JobID} completed", job.PrintJobID);
             }
             else
@@ -603,9 +764,11 @@ namespace Printuesi.Server.Services
                     .FirstOrDefault();
 
                 result.NextPaperSize = nextPaperSize;
-                result.Message = nextPaperSize.HasValue
-                    ? $"Group done. Next: load {nextPaperSize} paper and call start-group."
-                    : null;
+
+                if (nextPaperSize.HasValue)
+                {
+                    result.Message = $"Group done. Next: load {nextPaperSize} paper and click 'Kam ndërruar letrën'.";
+                }
             }
 
             _db.PrintJobs.Update(job);
@@ -615,12 +778,20 @@ namespace Printuesi.Server.Services
         private async Task<PrinterState> GetOrCreatePrinterState()
         {
             var state = await _db.PrinterState.FirstOrDefaultAsync();
+
             if (state == null)
             {
-                state = new PrinterState { Id = 1, CurrentPaperSize = null, LastUpdated = null };
+                state = new PrinterState
+                {
+                    Id = 1,
+                    CurrentPaperSize = null,
+                    LastUpdated = null
+                };
+
                 _db.PrinterState.Add(state);
                 await _db.SaveChangesAsync();
             }
+
             return state;
         }
 
@@ -629,61 +800,46 @@ namespace Printuesi.Server.Services
             try
             {
                 var jobDir = Path.Combine(_outputBasePath, printJobID);
+
                 if (Directory.Exists(jobDir))
                     Directory.Delete(jobDir, recursive: true);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Failed to clean up output for job {JobID}: {Message}",
-                    printJobID, ex.Message);
+                _logger.LogWarning(
+                    "Failed to clean up output for job {JobID}: {Message}",
+                    printJobID,
+                    ex.Message);
             }
         }
 
-        // ── Response builders ─────────────────────────────────────────────────
-
-        private async Task<PrintJobResponse> BuildResponse(
-            PrintJobs job, Clients client,
-            List<OrderLineItem> scannedItems, List<string> unrecognized)
+        private string GetTestMarkerPath(string printJobID, PaperSize paperSize)
         {
-            var response = new PrintJobResponse
-            {
-                PrintJobID = job.PrintJobID,
-                ClientID = client.ClientID,
-                ClientName = client.Name,
-                Status = job.Status,
-                CreatedAt = job.CreatedAt,
-                CompletedAt = job.CompletedAt,
-                Notes = job.Notes,
-                CreatedBy = job.CreatedBy,
-                UnrecognizedProducts = unrecognized
-            };
+            var outputDir = Path.Combine(_outputBasePath, printJobID, paperSize.ToString());
 
-            response.Groups = scannedItems
-                .GroupBy(i => i.PaperSize)
-                .Select(g => new PrintGroupResponse
-                {
-                    PaperSize = g.Key,
-                    IsCompleted = false,
-                    Items = g.Select(i =>
-                    {
-                        var clientFolder = GetClientFolderName(client.Name);
-                        var labelPath = Path.Combine(_labelsBasePath, clientFolder,
-                            $"{i.ProductCode} {clientFolder.ToUpper()} {i.PaperSize}.pdf");
-                        return new PrintJobItemResponse
-                        {
-                            ProductCode = i.ProductCode,
-                            ProductName = i.ProductName,
-                            PaperSize = i.PaperSize,
-                            QuantityRequested = i.Quantity,
-                            QuantityPrinted = 0,
-                            Status = Status.Pending,
-                            LabelFilePath = labelPath,
-                            LabelFileFound = File.Exists(labelPath)
-                        };
-                    }).ToList()
-                }).ToList();
+            Directory.CreateDirectory(outputDir);
 
-            return response;
+            return Path.Combine(outputDir, "_test_printed.marker");
+        }
+
+        private bool HasTestPrinted(string printJobID, PaperSize paperSize)
+        {
+            return File.Exists(GetTestMarkerPath(printJobID, paperSize));
+        }
+
+        private void MarkTestPrinted(string printJobID, PaperSize paperSize)
+        {
+            var markerPath = GetTestMarkerPath(printJobID, paperSize);
+
+            File.WriteAllText(markerPath, DateTime.UtcNow.ToString("O"));
+        }
+
+        private void ClearTestPrinted(string printJobID, PaperSize paperSize)
+        {
+            var markerPath = GetTestMarkerPath(printJobID, paperSize);
+
+            if (File.Exists(markerPath))
+                File.Delete(markerPath);
         }
 
         private string GetClientFolderName(string clientName)
@@ -692,18 +848,82 @@ namespace Printuesi.Server.Services
                 .ToTitleCase(clientName.ToLower());
         }
 
+        private bool ClientRequiresKg(string clientName)
+        {
+            var kgClients = _config.GetSection("VariableKgClients")
+                .Get<string[]>() ?? Array.Empty<string>();
+
+            return kgClients.Any(c =>
+                c.Equals(clientName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private List<string> GetKgOptions()
+        {
+            return _config.GetSection("KgOptions")
+                .Get<string[]>()?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList()
+                ?? new List<string> { "0.5 kg", "1 kg", "2 kg" };
+        }
+
+        private string? NormalizeKg(string? kg)
+        {
+            if (string.IsNullOrWhiteSpace(kg))
+                return null;
+
+            return kg.Trim();
+        }
+
+        private bool ValidateKgIfRequired(PrintJobs job, string? kg, PrintGroupResult result)
+        {
+            var clientName = job.Client?.Name ?? string.Empty;
+
+            if (!ClientRequiresKg(clientName))
+                return true;
+
+            var normalizedKg = NormalizeKg(kg);
+
+            if (string.IsNullOrWhiteSpace(normalizedKg))
+            {
+                result.Success = false;
+                result.Message = $"Client '{clientName}' requires KG selection.";
+                result.Errors.Add("KG value is required for this client.");
+                return false;
+            }
+
+            var allowed = GetKgOptions();
+
+            if (!allowed.Any(x => x.Equals(normalizedKg, StringComparison.OrdinalIgnoreCase)))
+            {
+                result.Success = false;
+                result.Message = $"Invalid KG value: {normalizedKg}.";
+                result.Errors.Add($"Allowed KG values: {string.Join(", ", allowed)}");
+                return false;
+            }
+
+            return true;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Response builder
+        // ─────────────────────────────────────────────────────────────────────
+
         private async Task<PrintJobResponse> BuildResponseFromDb(PrintJobs job)
         {
+            var clientName = job.Client?.Name ?? string.Empty;
+
             var response = new PrintJobResponse
             {
                 PrintJobID = job.PrintJobID,
                 ClientID = job.ClientID,
-                ClientName = job.Client?.Name ?? string.Empty,
+                ClientName = clientName,
                 Status = job.Status,
                 CreatedAt = job.CreatedAt,
                 CompletedAt = job.CompletedAt,
                 Notes = job.Notes,
-                CreatedBy = job.CreatedBy
+                CreatedBy = job.CreatedBy,
+                RequiresKg = ClientRequiresKg(clientName),
+                KgOptions = GetKgOptions()
             };
 
             response.Groups = job.PrintJobObjects
@@ -712,20 +932,29 @@ namespace Printuesi.Server.Services
                 {
                     PaperSize = g.Key,
                     IsCompleted = g.All(o => o.Status == Status.Completed),
-                    Items = g.Select(o => new PrintJobItemResponse
+                    Items = g.Select(o =>
                     {
-                        PrintJobObjectID = o.PrintJobObjectID,
-                        ProductCode = o.ProductCode,
-                        PaperSize = ResolveItemPaperSize(o),
-                        QuantityRequested = o.Quantity_Requested,
-                        QuantityPrinted = o.Quantity_Printed,
-                        ExpiryDate = o.Expiry_Date,
-                        LotNumber = o.Lot_Num ?? string.Empty,
-                        Status = o.Status
+                        var paperSize = ResolveItemPaperSize(o);
+                        var labelPath = ResolveTemplatePath(clientName, o);
+
+                        return new PrintJobItemResponse
+                        {
+                            PrintJobObjectID = o.PrintJobObjectID,
+                            ProductCode = o.ProductCode,
+                            ProductName = o.ProductCode,
+                            PaperSize = paperSize,
+                            QuantityRequested = o.Quantity_Requested,
+                            QuantityPrinted = o.Quantity_Printed,
+                            ExpiryDate = o.Expiry_Date,
+                            LotNumber = o.Lot_Num ?? string.Empty,
+                            Status = o.Status,
+                            LabelFilePath = labelPath,
+                            LabelFileFound = !string.IsNullOrWhiteSpace(labelPath) && File.Exists(labelPath)
+                        };
                     }).ToList()
                 }).ToList();
 
-            return response;
+            return await Task.FromResult(response);
         }
     }
 }

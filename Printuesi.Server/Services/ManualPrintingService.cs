@@ -102,6 +102,11 @@ namespace Printuesi.Server.Services
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
+            _logger.LogInformation(
+                "ManualPrintingService.SendDriverAsync started. PaperSize: {PaperSize}, DriversBasePath: {DriversBasePath}",
+                request.PaperSize,
+                _driversBasePath);
+
             var response = new ManualDriverResponse
             {
                 Success = false,
@@ -109,6 +114,9 @@ namespace Printuesi.Server.Services
             };
 
             var printerOnline = await _printerService.TestConnectionAsync();
+
+            _logger.LogInformation("Printer online check result: {PrinterOnline}", printerOnline);
+
             if (!printerOnline)
             {
                 response.Message = "Printer is offline.";
@@ -117,6 +125,11 @@ namespace Printuesi.Server.Services
             }
 
             var driverPath = ResolveDriverPath(request.PaperSize);
+
+            _logger.LogInformation(
+                "Resolved driver path for {PaperSize}: {DriverPath}",
+                request.PaperSize,
+                string.IsNullOrWhiteSpace(driverPath) ? "(not found)" : driverPath);
 
             if (string.IsNullOrWhiteSpace(driverPath))
             {
@@ -129,6 +142,11 @@ namespace Printuesi.Server.Services
             response.Message = $"Sending driver {response.DriverFileName}...";
 
             var sent = await _printerService.SendDriverAsync(driverPath);
+
+            _logger.LogInformation(
+                "PrinterService.SendDriverAsync result for {DriverFileName}: {Sent}",
+                response.DriverFileName,
+                sent);
 
             if (!sent)
             {

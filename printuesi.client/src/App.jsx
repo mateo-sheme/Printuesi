@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import AutomaticPrinting from "./pages/AutomaticPrinting";
 import ManualPrinting from "./pages/ManualPrinting";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import PrintJobs from "./pages/PrintJobs";
 
 function ProtectedRoute({ children }) {
     const { isAuthenticated } = useAuth();
@@ -54,6 +55,7 @@ export default function App() {
                     <Route path="clients" element={<PlaceholderPage pageKey="clients" />} />
                     <Route path="templates" element={<PlaceholderPage pageKey="templates" />} />
                     <Route path="print-history" element={<PlaceholderPage pageKey="printHistory" />} />
+                    <Route path="print-jobs" element={<PrintJobs />} />
 
                     <Route
                         path="supplies"

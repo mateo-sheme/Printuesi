@@ -15,19 +15,15 @@ export const navigationItems = [
         icon: "⎙"
     },
     {
+        labelKey: "Printimet",
+        fallbackLabel: "Print Jobs",
+        path: "/print-jobs",
+        icon: "▣"
+    },
+    {
         labelKey: "clients",
         path: "/clients",
         icon: "◎"
-    },
-    {
-        labelKey: "templates",
-        path: "/templates",
-        icon: "□"
-    },
-    {
-        labelKey: "printHistory",
-        path: "/print-history",
-        icon: "◴"
     },
     {
         labelKey: "supplies",

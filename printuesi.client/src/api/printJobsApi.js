@@ -1,66 +1,70 @@
 import { apiRequest } from "./http";
 
+function buildGroupQuery(paperSize, kg = "") {
+    const params = new URLSearchParams();
+    params.set("paperSize", paperSize);
+
+    if (kg) {
+        params.set("kg", kg);
+    }
+
+    return params.toString();
+}
+
 export const printJobsApi = {
-    getAll(status = null) {
-        const query = status ? `?status=${encodeURIComponent(status)}` : "";
-        return apiRequest(`/api/printjobs${query}`);
-    },
-
-    getById(printJobID) {
-        return apiRequest(`/api/printjobs/${printJobID}`);
-    },
-
-    createFromOrder(orderPdf, createdByUserID) {
+    createFromOrder(file, createdByUserID) {
         const formData = new FormData();
-        formData.append("orderPdf", orderPdf);
+        formData.append("orderPdf", file);
 
         return apiRequest(
             `/api/printjobs/create-from-order?createdByUserID=${encodeURIComponent(createdByUserID)}`,
             {
                 method: "POST",
-                body: formData
+                body: formData,
+                isFormData: true
             }
         );
     },
 
-    startGroup(printJobID, paperSize) {
-        return apiRequest(
-            `/api/printjobs/${printJobID}/start-group?paperSize=${encodeURIComponent(paperSize)}`,
-            {
-                method: "POST"
-            }
-        );
+    getAll(status = "") {
+        const query = status ? `?status=${encodeURIComponent(status)}` : "";
+        return apiRequest(`/api/printjobs${query}`);
+    },
+
+    getById(printJobID) {
+        return apiRequest(`/api/printjobs/${encodeURIComponent(printJobID)}`);
     },
 
     confirmPaperChange(printJobID, paperSize) {
         return apiRequest(
-            `/api/printjobs/${printJobID}/confirm-paper-change?paperSize=${encodeURIComponent(paperSize)}`,
-            {
-                method: "POST"
-            }
+            `/api/printjobs/${encodeURIComponent(printJobID)}/confirm-paper-change?paperSize=${encodeURIComponent(paperSize)}`,
+            { method: "POST" }
         );
     },
 
-    confirmTest(printJobID, paperSize) {
+    printTest(printJobID, paperSize, kg = "") {
         return apiRequest(
-            `/api/printjobs/${printJobID}/confirm-test?paperSize=${encodeURIComponent(paperSize)}`,
-            {
-                method: "POST"
-            }
+            `/api/printjobs/${encodeURIComponent(printJobID)}/print-test?${buildGroupQuery(paperSize, kg)}`,
+            { method: "POST" }
         );
     },
 
-    reprintTest(printJobID, paperSize) {
+    reprintTest(printJobID, paperSize, kg = "") {
         return apiRequest(
-            `/api/printjobs/${printJobID}/reprint-test?paperSize=${encodeURIComponent(paperSize)}`,
-            {
-                method: "POST"
-            }
+            `/api/printjobs/${encodeURIComponent(printJobID)}/reprint-test?${buildGroupQuery(paperSize, kg)}`,
+            { method: "POST" }
+        );
+    },
+
+    startGroup(printJobID, paperSize, kg = "") {
+        return apiRequest(
+            `/api/printjobs/${encodeURIComponent(printJobID)}/start-group?${buildGroupQuery(paperSize, kg)}`,
+            { method: "POST" }
         );
     },
 
     cancel(printJobID) {
-        return apiRequest(`/api/printjobs/${printJobID}`, {
+        return apiRequest(`/api/printjobs/${encodeURIComponent(printJobID)}`, {
             method: "DELETE"
         });
     }

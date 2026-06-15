@@ -26,8 +26,8 @@ namespace Printuesi.Server.Entities
         public string PdfPath { get; set; } = string.Empty;
 
         [Required]
-        public string DateFormat { get; set; } = string.Empty;          // "dd/MM/yyyy" or "MM/yyyy"
-        public int ExpiryOffsetMonths { get; set; }
+        public string DateFormat { get; set; } = "dd/MM/yyyy";
+        public int ExpiryOffsetMonths { get; set; } = 12;
 
         [ForeignKey("ClientID")]
         public Clients Clients { get; set; } = null!;

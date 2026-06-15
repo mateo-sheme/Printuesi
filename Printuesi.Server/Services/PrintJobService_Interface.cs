@@ -5,47 +5,57 @@ namespace Printuesi.Server.Services
     public interface PrintJobService_Interface
     {
         /// <summary>
-        /// Step 1: Upload order PDF → scan → create print job with all items
+        /// Upload order PDF, scan it, create print job and print job objects.
         /// </summary>
         Task<PrintJobResponse> CreateFromOrderAsync(IFormFile orderPdf, string createdByUserID);
 
         /// <summary>
-        /// Step 2: Get full print job with items grouped by paper size
+        /// Get one print job by ID.
         /// </summary>
         Task<PrintJobResponse?> GetPrintJobAsync(string printJobID);
 
         /// <summary>
-        /// Step 3: Start printing a paper size group.
-        /// - Checks if paper change needed → if yes, returns NeedsPaperChange = true, caller waits
-        /// - For Mini/Rrethi: sends 1 test copy, returns NeedsTestConfirm = true
-        /// - For Normale/Prodhim: prints all copies directly
-        /// </summary>
-        Task<PrintGroupResult> StartGroupAsync(string printJobID, PaperSize paperSize);
-
-        /// <summary>
-        /// Step 4a: User confirmed paper has been changed → send driver + continue
-        /// </summary>
-        Task<PrintGroupResult> ConfirmPaperChangeAsync(string printJobID, PaperSize paperSize);
-
-        /// <summary>
-        /// Step 4b: User confirmed test print is ok → print remaining copies
-        /// </summary>
-        Task<PrintGroupResult> ConfirmTestPrintAsync(string printJobID, PaperSize paperSize);
-
-        /// <summary>
-        /// Step 4c: User said test print is NOT ok → reprint 1 test copy
-        /// </summary>
-        Task<PrintGroupResult> ReprintTestAsync(string printJobID, PaperSize paperSize);
-
-        /// <summary>
-        /// Get all print jobs, optionally filtered by status
+        /// Get all print jobs, optionally filtered by status.
         /// </summary>
         Task<List<PrintJobResponse>> GetAllPrintJobsAsync(Status? status = null);
 
         /// <summary>
-        /// Cancel a print job
+        /// User confirms paper was physically changed.
+        /// Backend sends driver/settings and stores current paper state.
+        /// </summary>
+        Task<PrintGroupResult> ConfirmPaperChangeAsync(string printJobID, PaperSize paperSize);
+
+        /// <summary>
+        /// Prints one test label.
+        /// Mandatory for Mini/Rrethi before starting group.
+        /// Optional for Normale/Prodhim.
+        /// </summary>
+        Task<PrintGroupResult> PrintTestAsync(string printJobID, PaperSize paperSize, string? kg = null );
+
+        /// <summary>
+        /// Reprints one test label.
+        /// </summary>
+        Task<PrintGroupResult> ReprintTestAsync(string printJobID, PaperSize paperSize, string? kg = null);
+
+        /// <summary>
+        /// Starts the real production group.
+        /// Mini/Rrethi require a previous successful test.
+        /// Normale/Prodhim can start without test.
+        /// </summary>
+        Task<PrintGroupResult> StartGroupAsync(string printJobID, PaperSize paperSize, string? kg = null);
+
+        /// <summary>
+        /// Legacy compatibility endpoint.
+        /// Later remove this from controller, service, interface, frontend API.
+        /// </summary>
+        Task<PrintGroupResult> ConfirmTestPrintAsync(string printJobID, PaperSize paperSize, string? kg = null);
+
+        /// <summary>
+        /// Cancel print job.
         /// </summary>
         Task<bool> CancelPrintJobAsync(string printJobID);
+
+
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────────────
@@ -60,6 +70,8 @@ namespace Printuesi.Server.Services
         public DateTime? CompletedAt { get; set; }
         public string Notes { get; set; } = string.Empty;
         public string CreatedBy { get; set; } = string.Empty;
+        public bool RequiresKg { get; set; }
+        public List<string> KgOptions { get; set; } = new();
         public List<PrintGroupResponse> Groups { get; set; } = new();
         public List<string> UnrecognizedProducts { get; set; } = new();
     }
@@ -96,9 +108,8 @@ namespace Printuesi.Server.Services
         public bool JobCompleted { get; set; }
         public PaperSize? NextPaperSize { get; set; }
 
-        // State flags — frontend reacts to these
-        public bool NeedsPaperChange { get; set; }     // user must change paper
-        public bool NeedsTestConfirm { get; set; }     // user must confirm test print
-        public string? Message { get; set; }            // human readable status message
+        public bool NeedsPaperChange { get; set; }
+        public bool NeedsTestConfirm { get; set; }
+        public string? Message { get; set; }
     }
 }

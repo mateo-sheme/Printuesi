@@ -5,13 +5,18 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 //builder.Services.AddDbContext<ApplicationDbContext>(option => 
 //option.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 

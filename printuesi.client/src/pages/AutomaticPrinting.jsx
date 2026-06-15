@@ -2,9 +2,16 @@ import { useState } from "react";
 import { printJobsApi } from "../api/printJobsApi";
 import { useAuth } from "../contexts/auth/useAuth";
 import { useLanguage } from "../contexts/language/useLanguage";
-import { useTheme } from "../contexts/theme/useTheme";
 import StatusBadge from "../components/ui/StatusBadge";
 import { paperSizeLabel } from "../utils/constants";
+
+function getValue(object, camelKey, pascalKey, fallback = "") {
+    return object?.[camelKey] ?? object?.[pascalKey] ?? fallback;
+}
+
+function normalizeBool(value) {
+    return value === true || value === "true" || value === "True";
+}
 
 export default function AutomaticPrinting() {
     const { user } = useAuth();
@@ -14,12 +21,21 @@ export default function AutomaticPrinting() {
     const [job, setJob] = useState(null);
     const [lastResult, setLastResult] = useState(null);
     const [activePaperSize, setActivePaperSize] = useState("");
+    const [selectedKg, setSelectedKg] = useState("1 kg");
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
     const refreshJob = async (printJobID) => {
         const refreshed = await printJobsApi.getById(printJobID);
         setJob(refreshed);
+
+        const requiresKg = normalizeBool(getValue(refreshed, "requiresKg", "RequiresKg", false));
+        const kgOptions = getValue(refreshed, "kgOptions", "KgOptions", ["0.5 kg", "1 kg", "2 kg"]);
+
+        if (requiresKg && Array.isArray(kgOptions) && kgOptions.length > 0) {
+            setSelectedKg((current) => (kgOptions.includes(current) ? current : kgOptions[0]));
+        }
     };
 
     const createJob = async (event) => {
@@ -38,9 +54,17 @@ export default function AutomaticPrinting() {
             const created = await printJobsApi.createFromOrder(file, user.userID);
             setJob(created);
 
-            const firstGroup = (created.groups || created.Groups || [])[0];
+            const firstGroup = getValue(created, "groups", "Groups", [])[0];
+
             if (firstGroup) {
-                setActivePaperSize(paperSizeLabel(firstGroup.paperSize || firstGroup.PaperSize));
+                setActivePaperSize(paperSizeLabel(getValue(firstGroup, "paperSize", "PaperSize")));
+            }
+
+            const requiresKg = normalizeBool(getValue(created, "requiresKg", "RequiresKg", false));
+            const kgOptions = getValue(created, "kgOptions", "KgOptions", ["0.5 kg", "1 kg", "2 kg"]);
+
+            if (requiresKg && Array.isArray(kgOptions) && kgOptions.length > 0) {
+                setSelectedKg(kgOptions[0]);
             }
         } catch (err) {
             setError(err.message || "Failed to create print job.");
@@ -49,16 +73,24 @@ export default function AutomaticPrinting() {
         }
     };
 
-    const runAction = async (action) => {
+    const runAction = async (action, { sendKg = false } = {}) => {
         if (!job || !activePaperSize) return;
 
-        const printJobID = job.printJobID || job.PrintJobID;
+        const printJobID = getValue(job, "printJobID", "PrintJobID");
+        const requiresKg = normalizeBool(getValue(job, "requiresKg", "RequiresKg", false));
+
+        if (sendKg && requiresKg && !selectedKg) {
+            setError("Please select KG first.");
+            return;
+        }
 
         setLoading(true);
         setError("");
 
         try {
-            const result = await action(printJobID, activePaperSize);
+            const kgToSend = sendKg && requiresKg ? selectedKg : "";
+            const result = await action(printJobID, activePaperSize, kgToSend);
+
             setLastResult(result);
             await refreshJob(printJobID);
         } catch (err) {
@@ -71,7 +103,7 @@ export default function AutomaticPrinting() {
     const cancelJob = async () => {
         if (!job) return;
 
-        const printJobID = job.printJobID || job.PrintJobID;
+        const printJobID = getValue(job, "printJobID", "PrintJobID");
 
         setLoading(true);
         setError("");
@@ -86,7 +118,11 @@ export default function AutomaticPrinting() {
         }
     };
 
-    const groups = job?.groups || job?.Groups || [];
+    const groups = getValue(job, "groups", "Groups", []);
+    const requiresKg = job ? normalizeBool(getValue(job, "requiresKg", "RequiresKg", false)) : false;
+    const kgOptions = job
+        ? getValue(job, "kgOptions", "KgOptions", ["0.5 kg", "1 kg", "2 kg"])
+        : ["0.5 kg", "1 kg", "2 kg"];
 
     return (
         <div className="page-stack">
@@ -96,7 +132,7 @@ export default function AutomaticPrinting() {
                     <h1>{t("uploadOrderPdf")}</h1>
                     <p>
                         Upload the order PDF. The backend scans it, groups products by paper
-                        size, fills expiry date and LOT, then waits for confirmations.
+                        size, fills expiry date, LOT, and KG when required.
                     </p>
                 </div>
             </section>
@@ -132,11 +168,11 @@ export default function AutomaticPrinting() {
                         <div>
                             <h5>{t("jobCreated")}</h5>
                             <p>
-                                Job ID: <strong>{job.printJobID || job.PrintJobID}</strong>
+                                Job ID: <strong>{getValue(job, "printJobID", "PrintJobID")}</strong>
                             </p>
                         </div>
 
-                        <StatusBadge status={job.status || job.Status} />
+                        <StatusBadge status={getValue(job, "status", "Status")} />
                     </div>
 
                     <div className="row g-3 mb-4">
@@ -148,7 +184,7 @@ export default function AutomaticPrinting() {
                                 onChange={(event) => setActivePaperSize(event.target.value)}
                             >
                                 {groups.map((group) => {
-                                    const size = paperSizeLabel(group.paperSize || group.PaperSize);
+                                    const size = paperSizeLabel(getValue(group, "paperSize", "PaperSize"));
 
                                     return (
                                         <option key={size} value={size}>
@@ -158,19 +194,31 @@ export default function AutomaticPrinting() {
                                 })}
                             </select>
                         </div>
+
+                        {requiresKg && (
+                            <div className="col-12 col-md-6">
+                                <label className="form-label">KG</label>
+                                <select
+                                    className="form-select form-select-lg"
+                                    value={selectedKg}
+                                    onChange={(event) => setSelectedKg(event.target.value)}
+                                >
+                                    {kgOptions.map((option) => (
+                                        <option key={option} value={option}>
+                                            {option}
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="small text-muted mt-2">
+                                    This replaces {"{{KG}}"} on the PDF label.
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="action-bar">
+                    <div className="action-bar automatic-action-bar">
                         <button
                             className="btn btn-primary-gradient"
-                            disabled={loading || !activePaperSize}
-                            onClick={() => runAction(printJobsApi.startGroup)}
-                        >
-                            {t("startGroup")}
-                        </button>
-
-                        <button
-                            className="btn btn-outline-primary"
                             disabled={loading || !activePaperSize}
                             onClick={() => runAction(printJobsApi.confirmPaperChange)}
                         >
@@ -180,17 +228,25 @@ export default function AutomaticPrinting() {
                         <button
                             className="btn btn-success"
                             disabled={loading || !activePaperSize}
-                            onClick={() => runAction(printJobsApi.confirmTest)}
+                            onClick={() => runAction(printJobsApi.printTest, { sendKg: true })}
                         >
-                            {t("confirmTest")}
+                            Printo testin
                         </button>
 
                         <button
                             className="btn btn-warning"
                             disabled={loading || !activePaperSize}
-                            onClick={() => runAction(printJobsApi.reprintTest)}
+                            onClick={() => runAction(printJobsApi.reprintTest, { sendKg: true })}
                         >
                             {t("reprintTest")}
+                        </button>
+
+                        <button
+                            className="btn btn-primary-gradient"
+                            disabled={loading || !activePaperSize}
+                            onClick={() => runAction(printJobsApi.startGroup, { sendKg: true })}
+                        >
+                            {t("startGroup")}
                         </button>
 
                         <button className="btn btn-outline-danger" disabled={loading} onClick={cancelJob}>
@@ -200,21 +256,22 @@ export default function AutomaticPrinting() {
 
                     {lastResult && (
                         <div className="alert alert-info mt-4">
-                            <strong>{lastResult.message || lastResult.Message || "Result"}</strong>
+                            <strong>{getValue(lastResult, "message", "Message", "Result")}</strong>
 
                             <div className="mt-2 small">
                                 Needs paper change:{" "}
-                                {String(lastResult.needsPaperChange ?? lastResult.NeedsPaperChange)}
+                                {String(getValue(lastResult, "needsPaperChange", "NeedsPaperChange", false))}
                                 <br />
                                 Needs test confirm:{" "}
-                                {String(lastResult.needsTestConfirm ?? lastResult.NeedsTestConfirm)}
+                                {String(getValue(lastResult, "needsTestConfirm", "NeedsTestConfirm", false))}
                                 <br />
-                                Job completed: {String(lastResult.jobCompleted ?? lastResult.JobCompleted)}
+                                Job completed:{" "}
+                                {String(getValue(lastResult, "jobCompleted", "JobCompleted", false))}
                             </div>
 
-                            {(lastResult.errors || lastResult.Errors || []).length > 0 && (
+                            {getValue(lastResult, "errors", "Errors", []).length > 0 && (
                                 <ul className="mt-2 mb-0">
-                                    {(lastResult.errors || lastResult.Errors || []).map((item, index) => (
+                                    {getValue(lastResult, "errors", "Errors", []).map((item, index) => (
                                         <li key={index}>{item}</li>
                                     ))}
                                 </ul>
@@ -230,32 +287,40 @@ export default function AutomaticPrinting() {
                                     <th>Product</th>
                                     <th>Requested</th>
                                     <th>Printed</th>
+                                    {requiresKg && <th>KG</th>}
                                     <th>Status</th>
                                     <th>Expiry</th>
                                     <th>LOT</th>
                                 </tr>
                             </thead>
+
                             <tbody>
                                 {groups.flatMap((group) => {
-                                    const paper = paperSizeLabel(group.paperSize || group.PaperSize);
-                                    const items = group.items || group.Items || [];
+                                    const paper = paperSizeLabel(getValue(group, "paperSize", "PaperSize"));
+                                    const items = getValue(group, "items", "Items", []);
 
                                     return items.map((item) => (
-                                        <tr key={item.printJobObjectID || item.PrintJobObjectID || item.productCode}>
+                                        <tr
+                                            key={
+                                                getValue(item, "printJobObjectID", "PrintJobObjectID") ||
+                                                getValue(item, "productCode", "ProductCode")
+                                            }
+                                        >
                                             <td>{paper}</td>
                                             <td>
-                                                <strong>{item.productCode || item.ProductCode}</strong>
+                                                <strong>{getValue(item, "productCode", "ProductCode")}</strong>
                                                 <div className="small text-muted">
-                                                    {item.productName || item.ProductName}
+                                                    {getValue(item, "productName", "ProductName")}
                                                 </div>
                                             </td>
-                                            <td>{item.quantityRequested || item.QuantityRequested}</td>
-                                            <td>{item.quantityPrinted || item.QuantityPrinted}</td>
+                                            <td>{getValue(item, "quantityRequested", "QuantityRequested", 0)}</td>
+                                            <td>{getValue(item, "quantityPrinted", "QuantityPrinted", 0)}</td>
+                                            {requiresKg && <td>{selectedKg || "-"}</td>}
                                             <td>
-                                                <StatusBadge status={item.status || item.Status} />
+                                                <StatusBadge status={getValue(item, "status", "Status")} />
                                             </td>
-                                            <td>{item.expiryDate || item.ExpiryDate || "-"}</td>
-                                            <td>{item.lotNumber || item.LotNumber || "-"}</td>
+                                            <td>{getValue(item, "expiryDate", "ExpiryDate", "-") || "-"}</td>
+                                            <td>{getValue(item, "lotNumber", "LotNumber", "-") || "-"}</td>
                                         </tr>
                                     ));
                                 })}

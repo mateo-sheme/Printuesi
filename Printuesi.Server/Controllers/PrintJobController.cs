@@ -20,9 +20,8 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Step 1: Upload order PDF → scan → create print job.
-        /// Returns job with items grouped by paper size.
-        /// Check LabelFileFound on each item — if false the label PDF is missing on the share.
+        /// Upload order PDF, scan products, create print job.
+        /// Returns job grouped by paper size.
         /// </summary>
         [HttpPost("create-from-order")]
         public async Task<ActionResult<PrintJobResponse>> CreateFromOrder(
@@ -41,8 +40,11 @@ namespace Printuesi.Server.Controllers
                     return BadRequest(new { message = "createdByUserID is required." });
 
                 var result = await _printJobService.CreateFromOrderAsync(orderPdf, createdByUserID);
-                return CreatedAtAction(nameof(GetPrintJob),
-                    new { printJobID = result.PrintJobID }, result);
+
+                return CreatedAtAction(
+                    nameof(GetPrintJob),
+                    new { printJobID = result.PrintJobID },
+                    result);
             }
             catch (InvalidOperationException ex)
             {
@@ -51,12 +53,18 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating print job from order");
-                return StatusCode(500, new { message = "Error creating print job.", error = ex.Message });
+
+                return StatusCode(500, new
+                {
+                    message = "Error creating print job.",
+                    error = ex.Message
+                });
             }
         }
 
         /// <summary>
-        /// Get print job by ID — shows all items grouped by paper size with current status.
+        /// Get one print job by ID.
+        /// Shows groups, quantities, expiry, LOT, status and missing label files.
         /// </summary>
         [HttpGet("{printJobID}")]
         public async Task<ActionResult<PrintJobResponse>> GetPrintJob(string printJobID)
@@ -64,6 +72,7 @@ namespace Printuesi.Server.Controllers
             try
             {
                 var result = await _printJobService.GetPrintJobAsync(printJobID);
+
                 if (result == null)
                     return NotFound(new { message = $"Print job '{printJobID}' not found." });
 
@@ -72,12 +81,18 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving print job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error retrieving print job.", error = ex.Message });
+
+                return StatusCode(500, new
+                {
+                    message = "Error retrieving print job.",
+                    error = ex.Message
+                });
             }
         }
 
         /// <summary>
         /// Get all print jobs, optionally filtered by status.
+        /// Example: /api/printjobs?status=Pending
         /// </summary>
         [HttpGet("")]
         public async Task<ActionResult<List<PrintJobResponse>>> GetAllPrintJobs(
@@ -91,43 +106,21 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving print jobs");
-                return StatusCode(500, new { message = "Error retrieving print jobs.", error = ex.Message });
+
+                return StatusCode(500, new
+                {
+                    message = "Error retrieving print jobs.",
+                    error = ex.Message
+                });
             }
         }
 
         /// <summary>
-        /// Step 3: Start printing a paper size group.
+        /// User confirms paper was physically changed.
+        /// Backend sends the driver/settings file for that paper size.
+        /// No label is printed here.
         /// 
-        /// Possible responses:
-        /// - NeedsPaperChange = true  → call confirm-paper-change when paper is loaded
-        /// - NeedsTestConfirm = true  → call confirm-test or reprint-test
-        /// - JobCompleted = true      → all done
-        /// - NextPaperSize set        → call start-group again for next size
-        /// </summary>
-        [HttpPost("{printJobID}/start-group")]
-        public async Task<ActionResult<PrintGroupResult>> StartGroup(
-            string printJobID,
-            [FromQuery] PaperSize paperSize)
-        {
-            try
-            {
-                var result = await _printJobService.StartGroupAsync(printJobID, paperSize);
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error starting group for job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error starting print group.", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Step 4a: User has physically changed the paper and confirms it is loaded.
-        /// Continues printing for this paper size group.
+        /// Required before printing a test or starting a group.
         /// </summary>
         [HttpPost("{printJobID}/confirm-paper-change")]
         public async Task<ActionResult<PrintGroupResult>> ConfirmPaperChange(
@@ -146,22 +139,101 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error confirming paper change for job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error confirming paper change.", error = ex.Message });
+
+                return StatusCode(500, new
+                {
+                    message = "Error confirming paper change.",
+                    error = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{printJobID}/print-test")]
+        public async Task<ActionResult<PrintGroupResult>> PrintTest(
+    string printJobID,
+    [FromQuery] PaperSize paperSize,
+    [FromQuery] string? kg = null)
+        {
+            try
+            {
+                var result = await _printJobService.PrintTestAsync(printJobID, paperSize, kg);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error printing test for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error printing test.", error = ex.Message });
+            }
+        }
+
+        [HttpPost("{printJobID}/reprint-test")]
+        public async Task<ActionResult<PrintGroupResult>> ReprintTest(
+            string printJobID,
+            [FromQuery] PaperSize paperSize,
+            [FromQuery] string? kg = null)
+        {
+            try
+            {
+                var result = await _printJobService.ReprintTestAsync(printJobID, paperSize, kg);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reprinting test for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error reprinting test.", error = ex.Message });
+            }
+        }
+
+        [HttpPost("{printJobID}/start-group")]
+        public async Task<ActionResult<PrintGroupResult>> StartGroup(
+            string printJobID,
+            [FromQuery] PaperSize paperSize,
+            [FromQuery] string? kg = null)
+        {
+            try
+            {
+                var result = await _printJobService.StartGroupAsync(printJobID, paperSize, kg);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting group for job {ID}", printJobID);
+                return StatusCode(500, new { message = "Error starting print group.", error = ex.Message });
             }
         }
 
         /// <summary>
-        /// Step 4b: User confirms test print alignment is correct.
-        /// Prints remaining copies (quantity - 1).
+        /// Legacy endpoint kept temporarily for compatibility.
+        /// In the new flow, frontend should call start-group instead.
+        /// 
+        /// This should eventually be removed from:
+        /// - Controller
+        /// - Interface
+        /// - Service
+        /// - printJobsApi.js
+        /// - AutomaticPrinting.jsx
         /// </summary>
         [HttpPost("{printJobID}/confirm-test")]
         public async Task<ActionResult<PrintGroupResult>> ConfirmTest(
-            string printJobID,
-            [FromQuery] PaperSize paperSize)
+        string printJobID,
+        [FromQuery] PaperSize paperSize,
+        [FromQuery] string? kg = null)
         {
             try
             {
-                var result = await _printJobService.ConfirmTestPrintAsync(printJobID, paperSize);
+                var result = await _printJobService.ConfirmTestPrintAsync(printJobID, paperSize, kg);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -176,32 +248,8 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Step 4c: Test print alignment is NOT ok — reprints 1 test copy.
-        /// Call confirm-test after checking, or cancel the job.
-        /// </summary>
-        [HttpPost("{printJobID}/reprint-test")]
-        public async Task<ActionResult<PrintGroupResult>> ReprintTest(
-            string printJobID,
-            [FromQuery] PaperSize paperSize)
-        {
-            try
-            {
-                var result = await _printJobService.ReprintTestAsync(printJobID, paperSize);
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error reprinting test for job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error reprinting test.", error = ex.Message });
-            }
-        }
-
-        /// <summary>
         /// Cancel a print job.
+        /// Cannot cancel a completed job.
         /// </summary>
         [HttpDelete("{printJobID}")]
         public async Task<ActionResult> CancelPrintJob(string printJobID)
@@ -209,6 +257,7 @@ namespace Printuesi.Server.Controllers
             try
             {
                 var result = await _printJobService.CancelPrintJobAsync(printJobID);
+
                 if (!result)
                     return NotFound(new { message = $"Print job '{printJobID}' not found." });
 
@@ -221,7 +270,12 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error cancelling print job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error cancelling print job.", error = ex.Message });
+
+                return StatusCode(500, new
+                {
+                    message = "Error cancelling print job.",
+                    error = ex.Message
+                });
             }
         }
     }

@@ -9,13 +9,32 @@ namespace Printuesi.Server.Controllers
     {
         private readonly ManualPrintingService_Interface _manualPrintingService;
         private readonly ILogger<ManualPrintingController> _logger;
+        private readonly IConfiguration _config;
 
         public ManualPrintingController(
-            ManualPrintingService_Interface manualPrintingService,
-            ILogger<ManualPrintingController> logger)
+        ManualPrintingService_Interface manualPrintingService,
+        ILogger<ManualPrintingController> logger,
+        IConfiguration config)
         {
             _manualPrintingService = manualPrintingService;
             _logger = logger;
+            _config = config;
+        }
+
+        [HttpGet("print-settings")]
+        public ActionResult GetPrintSettings()
+        {
+            var variableKgClients = _config.GetSection("VariableKgClients")
+                .Get<string[]>() ?? Array.Empty<string>();
+
+            var kgOptions = _config.GetSection("KgOptions")
+                .Get<string[]>() ?? new[] { "0.5 kg", "1 kg", "2 kg" };
+
+            return Ok(new
+            {
+                variableKgClients,
+                kgOptions
+            });
         }
 
         [HttpGet("labels")]
@@ -56,8 +75,7 @@ namespace Printuesi.Server.Controllers
                     FileAccess.Read,
                     FileShare.ReadWrite);
 
-                Response.Headers["Content-Disposition"] =
-                    $"inline; filename=\"{Path.GetFileName(fullPath)}\"";
+                Response.Headers["Content-Disposition"] = "inline";
 
                 return File(stream, "application/pdf", enableRangeProcessing: true);
             }
@@ -74,11 +92,23 @@ namespace Printuesi.Server.Controllers
 
         [HttpPost("send-driver")]
         public async Task<ActionResult<ManualDriverResponse>> SendDriver(
-            [FromBody] ManualSendDriverRequest request)
+    [FromBody] ManualSendDriverRequest request)
         {
             try
             {
+                _logger.LogInformation(
+                    "Manual send-driver requested. PaperSize: {PaperSize}",
+                    request?.PaperSize);
+
                 var result = await _manualPrintingService.SendDriverAsync(request);
+
+                _logger.LogInformation(
+                    "Manual send-driver result. Success: {Success}, PaperSize: {PaperSize}, Driver: {Driver}, Message: {Message}, Errors: {Errors}",
+                    result.Success,
+                    result.PaperSize,
+                    result.DriverFileName,
+                    result.Message,
+                    string.Join(" | ", result.Errors ?? new List<string>()));
 
                 if (!result.Success)
                     return BadRequest(result);
@@ -87,6 +117,8 @@ namespace Printuesi.Server.Controllers
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Manual send-driver bad request.");
+
                 return BadRequest(new ManualDriverResponse
                 {
                     Success = false,
@@ -97,6 +129,7 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending manual print driver");
+
                 return StatusCode(500, new ManualDriverResponse
                 {
                     Success = false,
