@@ -92,23 +92,27 @@ export default function Dashboard() {
 
     return (
         <div className="page-stack">
-            <section className="hero-panel">
+            <section className="hero-panel printer-hero">
                 <div>
-                    <span className="eyebrow">Printuesi Dashboard</span>
-                    <h1>{t("dashboard")}</h1>
+                    <span className="eyebrow">Epson Label Automation</span>
+                    <h1>Epson ColorWorks CW-6000AE</h1>
                     <p>
-                        Control automatic printing, manual printing, printer readiness, and
-                        recent private-label print jobs from one place.
+                        Select automatic printing for order-based jobs, or manual printing
+                        for direct private-label PDF printing from the label library.
                     </p>
+
+                    <div className="hero-actions mt-4">
+                        <Link to="/automatic-printing" className="btn btn-primary-gradient">
+                            {t("startAutomatic")}
+                        </Link>
+                        <Link to="/manual-printing" className="btn btn-outline-primary">
+                            {t("startManual")}
+                        </Link>
+                    </div>
                 </div>
 
-                <div className="hero-actions">
-                    <Link to="/automatic-printing" className="btn btn-primary-gradient">
-                        {t("startAutomatic")}
-                    </Link>
-                    <Link to="/manual-printing" className="btn btn-outline-primary">
-                        {t("startManual")}
-                    </Link>
+                <div className="printer-hero-image">
+                    <img src="/printer-placeholder.png" alt="Printer placeholder" />
                 </div>
             </section>
 

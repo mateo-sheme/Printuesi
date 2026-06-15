@@ -13,6 +13,7 @@
     --danger: #dc2626;
     --warning: #f59e0b;
     --shadow: 0 20px 60px rgba(31, 41, 99, 0.12);
+    --soft-shadow: 0 12px 34px rgba(31, 41, 99, 0.08);
     --radius: 22px;
 }
 
@@ -28,10 +29,19 @@
     --blue: #38bdf8;
     --purple: #a78bfa;
     --shadow: 0 20px 70px rgba(0, 0, 0, 0.4);
+    --soft-shadow: 0 12px 34px rgba(0, 0, 0, 0.25);
 }
+
+/* ---------- Base ---------- */
 
 * {
     box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    min-height: 100%;
 }
 
 body {
@@ -44,6 +54,13 @@ body {
 
 a {
     text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
 }
 
 .form-control,
@@ -64,6 +81,8 @@ a {
     background: #090d1b;
     color: var(--text);
 }
+
+/* ---------- App layout ---------- */
 
 .app-shell {
     display: flex;
@@ -90,6 +109,12 @@ a {
 .app-content {
     padding: 28px;
 }
+
+.sidebar-backdrop {
+    display: none;
+}
+
+/* ---------- Sidebar ---------- */
 
 .sidebar-brand {
     display: flex;
@@ -159,9 +184,7 @@ a {
     text-align: center;
 }
 
-.sidebar-backdrop {
-    display: none;
-}
+/* ---------- Topbar ---------- */
 
 .app-topbar {
     height: 76px;
@@ -195,6 +218,7 @@ a {
 }
 
 .user-pill {
+    display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 12px;
@@ -224,6 +248,8 @@ a {
     background: linear-gradient(135deg, var(--purple), var(--blue));
 }
 
+/* ---------- Buttons ---------- */
+
 .btn-primary-gradient {
     border: 0;
     color: #fff;
@@ -248,6 +274,8 @@ a {
         background: var(--panel-soft);
         color: var(--text);
     }
+
+/* ---------- General panels ---------- */
 
 .page-stack {
     display: grid;
@@ -326,6 +354,84 @@ a {
         margin: 0;
     }
 
+/* ---------- Login ---------- */
+
+.login-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+}
+
+.login-card {
+    width: min(100%, 460px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    box-shadow: var(--shadow);
+    padding: 32px;
+}
+
+    .login-card h1 {
+        font-weight: 950;
+        letter-spacing: -0.05em;
+    }
+
+/* ---------- Dashboard ---------- */
+
+.printer-hero {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    padding: 28px 36px;
+    min-height: unset;
+    overflow: hidden;
+}
+
+    .printer-hero > div:first-child {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .printer-hero h1 {
+        font-size: clamp(1.7rem, 3.2vw, 2.35rem);
+        line-height: 1.05;
+        margin-bottom: 8px;
+    }
+
+    .printer-hero p {
+        max-width: 620px;
+        font-size: 0.96rem;
+        line-height: 1.45;
+    }
+
+    .printer-hero .hero-actions {
+        max-width: 560px;
+        margin-top: 18px !important;
+    }
+
+.printer-hero-image {
+    flex: 0 0 220px;
+    width: 220px;
+    height: 180px;
+    max-width: 220px;
+    border-radius: 22px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    background: linear-gradient( 135deg, rgba(124, 58, 237, 0.14), rgba(14, 165, 233, 0.18) );
+    border: 1px solid var(--border);
+    padding: 10px;
+}
+
+    .printer-hero-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
 .stat-card {
     padding: 22px;
     min-height: 138px;
@@ -365,23 +471,6 @@ a {
 .stat-warning {
     border-top: 4px solid var(--warning);
 }
-
-.modern-table {
-    color: var(--text);
-    margin-bottom: 0;
-}
-
-    .modern-table th {
-        color: var(--muted);
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .modern-table td {
-        border-color: var(--border);
-    }
 
 .quick-action-list {
     display: grid;
@@ -425,6 +514,25 @@ a {
         color: var(--muted);
     }
 
+.modern-table {
+    color: var(--text);
+    margin-bottom: 0;
+}
+
+    .modern-table th {
+        color: var(--muted);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .modern-table td {
+        border-color: var(--border);
+    }
+
+/* ---------- Empty states ---------- */
+
 .empty-state {
     padding: 40px 20px;
     text-align: center;
@@ -443,26 +551,342 @@ a {
     font-weight: 900;
 }
 
-.login-page {
-    min-height: 100vh;
+/* ---------- Manual printing layout ---------- */
+
+.manual-page-compact {
+    gap: 18px;
+}
+
+.compact-hero {
+    padding: 18px 24px;
+    min-height: unset;
+}
+
+    .compact-hero h1 {
+        font-size: clamp(1.55rem, 3vw, 2.15rem);
+        margin-bottom: 6px;
+    }
+
+    .compact-hero p {
+        font-size: 0.96rem;
+        line-height: 1.45;
+    }
+
+.compact-panel {
+    padding: 18px;
+}
+
+.manual-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+    .manual-section-header h5 {
+        font-weight: 900;
+        margin: 2px 0 3px;
+    }
+
+    .manual-section-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+    }
+
+.manual-search-box {
+    width: min(340px, 100%);
+}
+
+.manual-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 18px;
+    align-items: start;
+}
+
+.labels-panel {
+    min-width: 0;
+}
+
+.print-side-panel {
+    position: sticky;
+    top: 92px;
+}
+
+.manual-warning {
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.compact-empty {
+    padding: 26px 14px;
+}
+
+/* ---------- Step 1 clients ---------- */
+
+.clients-top-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 390px);
+    gap: 18px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+    .clients-top-row h5 {
+        font-weight: 900;
+        margin: 2px 0 4px;
+    }
+
+    .clients-top-row p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.94rem;
+    }
+
+.clients-search-box {
+    width: 100%;
+}
+
+    .clients-search-box .form-control {
+        height: 48px;
+        border-radius: 14px;
+        padding-inline: 16px;
+    }
+
+.client-square-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+}
+
+.client-square-card {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: linear-gradient( 135deg, rgba(255, 255, 255, 0.96), rgba(242, 245, 255, 0.98) );
+    color: var(--text);
+    border-radius: 24px;
+    padding: 16px 14px;
+    min-height: 165px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    width: 100%;
+    box-shadow: var(--soft-shadow);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+[data-theme="dark"] .client-square-card {
+    background: linear-gradient( 135deg, rgba(17, 23, 40, 0.96), rgba(12, 17, 30, 0.98) );
+}
+
+.client-square-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(79, 70, 229, 0.35);
+    box-shadow: 0 18px 40px rgba(79, 70, 229, 0.14);
+}
+
+.client-square-card.selected {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--primary), var(--blue));
+    box-shadow: 0 18px 42px rgba(79, 70, 229, 0.28);
+}
+
+.client-square-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
     display: grid;
     place-items: center;
-    padding: 20px;
+    font-size: 1rem;
+    font-weight: 900;
+    color: #fff;
+    background: linear-gradient(135deg, var(--purple), var(--blue));
+    box-shadow: 0 10px 24px rgba(79, 70, 229, 0.2);
+    flex-shrink: 0;
 }
 
-.login-card {
-    width: min(100%, 460px);
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 28px;
-    box-shadow: var(--shadow);
-    padding: 32px;
-}
-
-    .login-card h1 {
-        font-weight: 950;
-        letter-spacing: -0.05em;
+    .client-square-avatar.all {
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
     }
+
+.client-square-card.selected .client-square-avatar {
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: none;
+}
+
+.client-square-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    width: 100%;
+}
+
+    .client-square-content strong {
+        font-size: 1rem;
+        line-height: 1.2;
+        max-width: 100%;
+        word-break: break-word;
+    }
+
+    .client-square-content span {
+        font-size: 0.83rem;
+        color: var(--muted);
+        line-height: 1.2;
+    }
+
+    .client-square-content small {
+        font-size: 0.74rem;
+        color: var(--muted);
+        opacity: 0.9;
+        max-width: 100%;
+        word-break: break-word;
+    }
+
+.client-square-card.selected .client-square-content span,
+.client-square-card.selected .client-square-content small {
+    color: rgba(255, 255, 255, 0.84);
+}
+
+/* ---------- Step 2 labels: fixed overflow ---------- */
+
+.compact-label-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.label-card.compact-label-card {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 24px;
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    min-width: 0;
+    width: 100%;
+    box-shadow: 0 10px 28px rgba(31, 41, 99, 0.08);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+    .label-card.compact-label-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(79, 70, 229, 0.35);
+        box-shadow: 0 16px 36px rgba(79, 70, 229, 0.12);
+    }
+
+    .label-card.compact-label-card.selected {
+        border-color: var(--primary);
+        box-shadow: 0 18px 40px rgba(79, 70, 229, 0.18);
+    }
+
+/* Important: this clips the PDF preview inside the rounded card */
+.pdf-preview-frame.compact-pdf-preview {
+    width: 100%;
+    height: 170px;
+    overflow: hidden;
+    background: #f5f6fb;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    flex: 0 0 auto;
+}
+
+    .pdf-preview-frame.compact-pdf-preview iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+        overflow: hidden;
+        background: #fff;
+    }
+
+    /* Optional: prevents browser PDF toolbar from visually dominating the card */
+    .pdf-preview-frame.compact-pdf-preview::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 1px rgba(42, 45, 70, 0.04);
+    }
+
+.label-card-body {
+    padding: 14px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+    .label-card-body strong {
+        font-size: 0.96rem;
+        line-height: 1.25;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        margin: 0;
+    }
+
+    .label-card-body small {
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.25;
+        margin: 0;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+.label-card-meta {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+    .label-card-meta span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 30px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(79, 70, 229, 0.08);
+        color: var(--primary);
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+
+/* ---------- Step 3 print panel ---------- */
+
+.selected-label-box {
+    padding: 14px;
+    border-radius: 16px;
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+    margin-bottom: 14px;
+    display: grid;
+    gap: 4px;
+}
+
+    .selected-label-box small {
+        color: var(--muted);
+    }
+
+/* ---------- Responsive ---------- */
 
 @media (max-width: 991.98px) {
     .app-sidebar {
@@ -494,7 +918,7 @@ a {
         padding: 0 18px;
     }
 
-    .hero-panel {
+    .hero-panel:not(.printer-hero) {
         align-items: flex-start;
         flex-direction: column;
     }
@@ -506,6 +930,101 @@ a {
         .hero-actions .btn {
             flex: 1;
         }
+
+    .printer-hero {
+        flex-direction: row;
+        align-items: center;
+        padding: 28px;
+        gap: 20px;
+    }
+
+    .printer-hero-image {
+        flex: 0 0 210px;
+        width: 210px;
+        height: 170px;
+        max-width: 210px;
+    }
+
+    .printer-hero .hero-actions {
+        width: auto;
+    }
+
+        .printer-hero .hero-actions .btn {
+            flex: 0 1 auto;
+            min-width: 190px;
+        }
+
+    .manual-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .print-side-panel {
+        position: static;
+    }
+
+    .manual-section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .manual-search-box {
+        width: 100%;
+    }
+
+    .compact-label-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+
+    .pdf-preview-frame.compact-pdf-preview {
+        height: 165px;
+    }
+
+    .client-square-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    .client-square-card {
+        min-height: 150px;
+    }
+}
+
+@media (max-width: 760px) {
+    .printer-hero {
+        gap: 14px;
+        padding: 22px;
+    }
+
+        .printer-hero h1 {
+            font-size: 1.75rem;
+        }
+
+        .printer-hero p {
+            font-size: 0.92rem;
+        }
+
+    .printer-hero-image {
+        flex: 0 0 150px;
+        width: 150px;
+        height: 130px;
+        max-width: 150px;
+    }
+
+    .printer-hero .hero-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+        max-width: 260px;
+    }
+
+        .printer-hero .hero-actions .btn {
+            width: 100%;
+            min-width: 0;
+        }
+
+    .clients-top-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
 }
 
 @media (max-width: 575.98px) {
@@ -525,5 +1044,65 @@ a {
 
     .action-bar .btn {
         width: 100%;
+    }
+
+    .compact-hero,
+    .compact-panel {
+        padding: 15px;
+    }
+
+    .client-square-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .client-square-card {
+        min-height: 140px;
+        border-radius: 20px;
+        padding: 14px 12px;
+    }
+
+    .client-square-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 16px;
+    }
+
+    .client-square-content strong {
+        font-size: 0.95rem;
+    }
+
+    .client-square-content span {
+        font-size: 0.78rem;
+    }
+
+    .compact-label-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pdf-preview-frame.compact-pdf-preview {
+        height: 155px;
+    }
+
+    .label-card.compact-label-card {
+        border-radius: 20px;
+    }
+}
+
+@media (max-width: 520px) {
+    .printer-hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .printer-hero-image {
+        width: 100%;
+        max-width: 100%;
+        height: 150px;
+        flex-basis: auto;
+    }
+
+    .printer-hero .hero-actions {
+        max-width: 100%;
     }
 }

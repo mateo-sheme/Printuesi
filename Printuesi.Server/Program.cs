@@ -25,6 +25,7 @@ builder.Services.AddScoped<PdfService_Interface, PdfService>();
 builder.Services.AddScoped<OrderScanService_Interface, OrderScanService>();
 builder.Services.AddScoped<PrintJobService_Interface, PrintJobService>();
 builder.Services.AddHostedService<OutputCleanupService>();
+builder.Services.AddScoped<ManualPrintingService_Interface, ManualPrintingService>();
 
 
 builder.Services.AddDbContext<ApplicationDbContext>(option =>

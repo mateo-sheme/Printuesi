@@ -186,9 +186,67 @@ namespace Printuesi.Server.Services
             }
         }
 
-        public Task<bool> SendFileLprAsync(string filePath)
+        public async Task<bool> SendFileLprAsync(string filePath)
         {
-            throw new NotImplementedException();
+            if (!File.Exists(filePath))
+                return false;
+
+            try
+            {
+                var data = await File.ReadAllBytesAsync(filePath);
+                var fileName = Path.GetFileName(filePath);
+
+                using var client = new TcpClient();
+
+                var connectTask = client.ConnectAsync(_printerIP, _lprport);
+                if (await Task.WhenAny(connectTask, Task.Delay(10000)) != connectTask)
+                    return false;
+
+                await connectTask;
+
+                var stream = client.GetStream();
+
+                var receiveJobCmd = new byte[] { 0x02 }
+                    .Concat(System.Text.Encoding.ASCII.GetBytes(_printerQueue))
+                    .Concat(new byte[] { 0x0A })
+                    .ToArray();
+
+                await stream.WriteAsync(receiveJobCmd);
+                await Task.Delay(200);
+
+                var controlContent =
+                    $"Hhost\n" +
+                    $"Puser\n" +
+                    $"fdfA001host\n" +
+                    $"UdfA001host\n" +
+                    $"N{fileName}\n";
+
+                var controlBytes = System.Text.Encoding.ASCII.GetBytes(controlContent);
+
+                var controlHeader = System.Text.Encoding.ASCII.GetBytes(
+                    $"\x02{controlBytes.Length} cfA001host\n");
+
+                await stream.WriteAsync(controlHeader);
+                await Task.Delay(100);
+                await stream.WriteAsync(controlBytes);
+                await stream.WriteAsync(new byte[] { 0x00 });
+                await Task.Delay(200);
+
+                var dataHeader = System.Text.Encoding.ASCII.GetBytes(
+                    $"\x03{data.Length} dfA001host\n");
+
+                await stream.WriteAsync(dataHeader);
+                await Task.Delay(100);
+                await stream.WriteAsync(data);
+                await stream.WriteAsync(new byte[] { 0x00 });
+
+                await Task.Delay(2000);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }
