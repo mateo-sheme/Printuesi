@@ -432,6 +432,9 @@ export default function ManualPrinting() {
         setPrintStage("Generating test label preview. No print will be sent...");
         setTestResult(null);
 
+        // Open blank window immediately so popup blockers do not block it.
+        const previewWindow = window.open("", "_blank");
+
         try {
             const result = await labelsApi.testLabel({
                 relativePath: selectedLabelRelativePath,
@@ -440,17 +443,35 @@ export default function ManualPrinting() {
             });
 
             setTestResult(result);
-            setPrintStage("");
-            setMessage(result.message || result.Message || "Test label generated. No print was sent.");
 
             const generatedPath =
                 result.generatedRelativePath ||
                 result.GeneratedRelativePath;
 
-            if (generatedPath) {
-                window.open(labelsApi.getTestPreviewUrl(generatedPath), "_blank");
+            if (!generatedPath) {
+                throw new Error("Test label was generated, but preview path was missing.");
             }
+
+            const blob = await labelsApi.getTestPreviewBlob(generatedPath);
+            const blobUrl = URL.createObjectURL(blob);
+
+            if (previewWindow) {
+                previewWindow.location.href = blobUrl;
+            } else {
+                window.open(blobUrl, "_blank");
+            }
+
+            setPrintStage("");
+            setMessage(result.message || result.Message || "Test label generated. No print was sent.");
+
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+            }, 60_000);
         } catch (err) {
+            if (previewWindow) {
+                previewWindow.close();
+            }
+
             const message =
                 err?.data?.message ||
                 err?.data?.Message ||

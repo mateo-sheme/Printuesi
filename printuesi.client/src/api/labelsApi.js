@@ -1,4 +1,4 @@
-import { apiRequest } from "./http";
+import { apiRequest, apiBlobRequest } from "./http";
 
 const BASE_URL = "/api/manual-printing";
 
@@ -23,13 +23,9 @@ export const labelsApi = {
     },
 
     sendDriver(paperSize) {
-        console.log("SEND DRIVER API CALLED:", paperSize);
-
         return apiRequest(`${BASE_URL}/send-driver`, {
             method: "POST",
-            body: JSON.stringify({
-                paperSize
-            })
+            body: JSON.stringify({ paperSize })
         });
     },
 
@@ -60,7 +56,9 @@ export const labelsApi = {
         });
     },
 
-    getTestPreviewUrl(relativePath) {
-        return `${BASE_URL}/test-label/preview?relativePath=${encodeURIComponent(relativePath)}`;
+    getTestPreviewBlob(relativePath) {
+        return apiBlobRequest(
+            `${BASE_URL}/test-label/preview?relativePath=${encodeURIComponent(relativePath)}`
+        );
     }
 };

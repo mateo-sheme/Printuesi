@@ -20,7 +20,7 @@ namespace Printuesi.Server.Entities
         public int Quantity_Printed { get; set; }
 
         [Required]
-        public string EXP { get; set; } = string.Empty;
+        public string Expiry_Date { get; set; } = string.Empty;
 
         public string? Lot_Num { get; set; }
 

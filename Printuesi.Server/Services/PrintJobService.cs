@@ -127,7 +127,7 @@ namespace Printuesi.Server.Services
                     LabelID = template?.LabelID,
                     Quantity_Requested = item.Quantity,
                     Quantity_Printed = 0,
-                    EXP = expiryFormatted,
+					Expiry_Date = expiryFormatted,
                     Lot_Num = lotNumber,
                     Status = Status.Pending
                 };
@@ -548,7 +548,7 @@ namespace Printuesi.Server.Services
                 templatePath,
                 new Dictionary<string, string>
                 {
-                    { "EXP", item.EXP },
+                    { "EXP", item.Expiry_Date  },
                     { "LOT", item.Lot_Num ?? string.Empty }
                 },
                 outputPath,
@@ -904,11 +904,24 @@ namespace Printuesi.Server.Services
             return true;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // Response builder
-        // ─────────────────────────────────────────────────────────────────────
+		private string ResolveProductName(PrintJobObjects item)
+		{
+			var configuredName = _config[$"ProductNames:{item.ProductCode}"];
 
-        private async Task<PrintJobResponse> BuildResponseFromDb(PrintJobs job)
+			if (!string.IsNullOrWhiteSpace(configuredName))
+				return configuredName;
+
+			if (!string.IsNullOrWhiteSpace(item.LabelTemplate?.LabelName))
+				return item.LabelTemplate.LabelName;
+
+			return item.ProductCode;
+		}
+
+		// ─────────────────────────────────────────────────────────────────────
+		// Response builder
+		// ─────────────────────────────────────────────────────────────────────
+
+		private async Task<PrintJobResponse> BuildResponseFromDb(PrintJobs job)
         {
             var clientName = job.Client?.Name ?? string.Empty;
 
@@ -941,12 +954,12 @@ namespace Printuesi.Server.Services
                         {
                             PrintJobObjectID = o.PrintJobObjectID,
                             ProductCode = o.ProductCode,
-                            ProductName = o.ProductCode,
-                            PaperSize = paperSize,
+							ProductName = ResolveProductName(o),
+							PaperSize = paperSize,
                             QuantityRequested = o.Quantity_Requested,
                             QuantityPrinted = o.Quantity_Printed,
-                            ExpiryDate = o.EXP,
-                            LotNumber = o.Lot_Num ?? string.Empty,
+                            ExpiryDate = o.Expiry_Date,
+							LotNumber = o.Lot_Num ?? string.Empty,
                             Status = o.Status,
                             LabelFilePath = labelPath,
                             LabelFileFound = !string.IsNullOrWhiteSpace(labelPath) && File.Exists(labelPath)

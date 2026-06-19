@@ -62,3 +62,44 @@ export async function apiRequest(path, options = {}) {
 
     return data;
 }
+
+export async function apiBlobRequest(path, options = {}) {
+    const token = getToken();
+
+    const headers = {
+        ...(options.headers || {})
+    };
+
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers
+    });
+
+    if (!response.ok) {
+        let message = `Request failed with status ${response.status}`;
+
+        try {
+            const contentType = response.headers.get("content-type") || "";
+
+            if (contentType.includes("application/json")) {
+                const data = await response.json();
+                message = data?.message || data?.title || data?.error || message;
+            } else {
+                const text = await response.text();
+                if (text) message = text;
+            }
+        } catch {
+            // Keep default message.
+        }
+
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+    }
+
+    return response.blob();
+}

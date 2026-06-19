@@ -14,8 +14,8 @@ export default function Topbar({ onMenuClick }) {
             </button>
 
             <div className="topbar-title">
-                <span className="text-muted small">Printuesi</span>
-                <strong>Epson Label Automation</strong>
+                <strong>Property of Çini-2009 shpk®</strong>
+                <strong>Mateo Sheme</strong>
             </div>
 
             <div className="topbar-actions">

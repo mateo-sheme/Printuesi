@@ -63,6 +63,12 @@ export const printJobsApi = {
         );
     },
 
+    stopPrinting(printJobID) {
+        return apiRequest(`/api/printjobs/${printJobID}/stop-printing`, {
+            method: "POST"
+        });
+    },
+
     cancel(printJobID) {
         return apiRequest(`/api/printjobs/${encodeURIComponent(printJobID)}`, {
             method: "DELETE"
