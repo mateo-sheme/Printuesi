@@ -33,14 +33,34 @@ export const labelsApi = {
         });
     },
 
-    printLabel({ relativePath, copies, kg = "" }) {
+    printLabel({ relativePath, copies, paperSize, kg = "", expiryDate = "", lotNumber = "" }) {
         return apiRequest(`${BASE_URL}/print-label`, {
             method: "POST",
             body: JSON.stringify({
                 relativePath,
                 copies,
-                kg
+                paperSize,
+                kg,
+                expiryDate,
+                lotNumber
             })
         });
+    },
+
+    testLabel({ relativePath, paperSize, kg = "", expiryDate = "", lotNumber = "" }) {
+        return apiRequest(`${BASE_URL}/test-label`, {
+            method: "POST",
+            body: JSON.stringify({
+                relativePath,
+                paperSize,
+                kg,
+                expiryDate,
+                lotNumber
+            })
+        });
+    },
+
+    getTestPreviewUrl(relativePath) {
+        return `${BASE_URL}/test-label/preview?relativePath=${encodeURIComponent(relativePath)}`;
     }
 };

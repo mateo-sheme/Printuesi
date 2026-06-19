@@ -1,4 +1,5 @@
 ﻿using Printuesi.Server.Enums;
+using Printuesi.Server.Helpers;
 using System.Text.RegularExpressions;
 
 namespace Printuesi.Server.Services
@@ -14,16 +15,20 @@ namespace Printuesi.Server.Services
 
         private readonly string _labelsBasePath;
         private readonly string _driversBasePath;
+        private readonly PdfService_Interface _pdfService;
+        private readonly string _outputBasePath;
 
         public ManualPrintingService(
-            IConfiguration config,
-            IWebHostEnvironment env,
-            PrinterService_Interface printerService,
-            ILogger<ManualPrintingService> logger)
+    IConfiguration config,
+    IWebHostEnvironment env,
+    PrinterService_Interface printerService,
+    PdfService_Interface pdfService,
+    ILogger<ManualPrintingService> logger)
         {
             _config = config;
             _env = env;
             _printerService = printerService;
+            _pdfService = pdfService;
             _logger = logger;
 
             _labelsBasePath = config["Labels:BasePath"]
@@ -34,6 +39,9 @@ namespace Printuesi.Server.Services
             _driversBasePath = Path.IsPathRooted(configuredDriverBasePath)
                 ? configuredDriverBasePath
                 : Path.Combine(env.WebRootPath, configuredDriverBasePath);
+
+            _outputBasePath = Path.Combine(env.WebRootPath, "labels_output", "manual");
+            Directory.CreateDirectory(_outputBasePath);
         }
 
         public async Task<List<ManualLabelResponse>> GetLabelsAsync(
@@ -161,7 +169,37 @@ namespace Printuesi.Server.Services
             response.Message = $"Driver for {request.PaperSize} sent successfully.";
             return response;
         }
+		private string GetManualOutputPath(string templatePath)
+		{
+			var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(templatePath);
 
+			var safeName = new string(fileNameWithoutExtension.Select(ch =>
+				char.IsLetterOrDigit(ch) ||
+				ch == '-' ||
+				ch == '_'
+					? ch
+					: '_').ToArray());
+
+			// Local date folder: labels_output/manual/2026-06-19/
+			var dayFolderName = DateTime.Now.ToString("yyyy-MM-dd");
+			var dayFolderPath = Path.Combine(_outputBasePath, dayFolderName);
+
+			Directory.CreateDirectory(dayFolderPath);
+
+			var outputName =
+				$"{safeName}_{DateTime.Now:HHmmssfff}_{Guid.NewGuid():N}.pdf";
+
+			return Path.Combine(dayFolderPath, outputName);
+		}
+
+		private bool ClientUsesWhiteText(string clientName)
+        {
+            var whiteTextClients = _config.GetSection("WhiteTextClients")
+                .Get<string[]>() ?? Array.Empty<string>();
+
+            return whiteTextClients.Any(c =>
+                c.Equals(clientName, StringComparison.OrdinalIgnoreCase));
+        }
         public async Task<ManualPrintResponse> PrintLabelAsync(ManualPrintLabelRequest request)
         {
             if (request == null)
@@ -169,51 +207,99 @@ namespace Printuesi.Server.Services
 
             ValidateCopies(request.Copies);
 
-            var labelPath = await ResolveSafeLabelPathAsync(request.RelativePath);
+            if (string.IsNullOrWhiteSpace(request.RelativePath))
+                throw new ArgumentException("RelativePath is required.", nameof(request.RelativePath));
+
+            var templatePath = await ResolveSafeLabelPathAsync(request.RelativePath);
+
+            var paperSize =
+                request.PaperSize ??
+                DetectPaperSize(Path.GetFileName(templatePath), ExtractProductCode(Path.GetFileName(templatePath))) ??
+                PaperSize.Normale;
+
+            var productionDate = DateTime.UtcNow;
+
+            var dateFormat = string.IsNullOrWhiteSpace(request.DateFormat)
+                ? "dd/MM/yyyy"
+                : request.DateFormat.Trim();
+
+            var expiryOffsetMonths = request.ExpiryOffsetMonths.GetValueOrDefault(12);
+
+            var expiryDate = !string.IsNullOrWhiteSpace(request.ExpiryDate)
+                ? request.ExpiryDate.Trim()
+                : productionDate.AddMonths(expiryOffsetMonths).ToString(dateFormat);
+
+            var lotNumber = !string.IsNullOrWhiteSpace(request.LotNumber)
+                ? request.LotNumber.Trim()
+                : LotNumberHelper.Generate(productionDate);
+
+            var kg = request.Kg?.Trim() ?? string.Empty;
+
+            var outputPath = GetManualOutputPath(templatePath);
+
+            var placeholders = new Dictionary<string, string>
+            {
+                { "EXP", expiryDate },
+                { "LOT", lotNumber }
+            };
+
+            if (!string.IsNullOrWhiteSpace(kg))
+                placeholders["KG"] = kg;
+
+            var clientFolder = GetClientFolder(request.RelativePath);
+            var useWhiteText = ClientUsesWhiteText(clientFolder);
 
             var response = new ManualPrintResponse
             {
                 Success = false,
-                FileName = Path.GetFileName(labelPath),
+                FileName = Path.GetFileName(templatePath),
                 RelativePath = request.RelativePath,
-                CopiesRequested = request.Copies
+                PaperSize = paperSize,
+                CopiesRequested = request.Copies,
+                CopiesSent = 0,
+                ExpiryDate = expiryDate,
+                LotNumber = lotNumber,
+                Kg = kg
             };
 
-            var printerOnline = await _printerService.TestConnectionAsync();
-            if (!printerOnline)
+            _logger.LogInformation(
+                "Manual print preparing filled PDF. Template: {Template}, Output: {Output}, PaperSize: {PaperSize}, Copies: {Copies}, Expiry: {Expiry}, Lot: {Lot}, KG: {Kg}",
+                templatePath,
+                outputPath,
+                paperSize,
+                request.Copies,
+                expiryDate,
+                lotNumber,
+                kg);
+
+            var filled = await _pdfService.FillPdfPlaceholdersAsync(
+                templatePath,
+                placeholders,
+                outputPath,
+                useWhiteText);
+
+            if (!filled)
             {
-                response.Message = "Printer is offline.";
-                response.Errors.Add("Printer is offline. Please check the printer connection.");
+                response.Message = "Failed to fill PDF placeholders.";
+                response.Errors.Add("PDF placeholder replacement failed.");
                 return response;
             }
 
-            for (var i = 1; i <= request.Copies; i++)
-            {
-                try
-                {
-                    var sent = await _printerService.SendFileLprAsync(labelPath);
+            var printed = await _printerService.PrintPdfWithCupsAsync(
+                outputPath,
+                request.Copies,
+                paperSize);
 
-                    if (sent)
-                    {
-                        response.CopiesSent++;
-                    }
-                    else
-                    {
-                        response.Errors.Add($"Failed to send copy {i}.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Manual print failed for copy {CopyNumber}", i);
-                    response.Errors.Add($"Copy {i} failed: {ex.Message}");
-                }
+            if (!printed)
+            {
+                response.Message = "Filled PDF was created, but CUPS printing failed.";
+                response.Errors.Add("CUPS print failed. Check backend logs and Linux VM CUPS logs.");
+                return response;
             }
 
-            response.Success = response.CopiesSent == response.CopiesRequested;
-
-            response.Message = response.Success
-                ? $"Manual print completed. {response.CopiesSent}/{response.CopiesRequested} copies sent."
-                : $"Manual print partially completed. {response.CopiesSent}/{response.CopiesRequested} copies sent.";
+            response.Success = true;
+            response.CopiesSent = request.Copies;
+            response.Message = $"Manual print completed through CUPS. {request.Copies}/{request.Copies} copies sent.";
 
             return response;
         }
@@ -247,7 +333,13 @@ namespace Printuesi.Server.Services
             var printResult = await PrintLabelAsync(new ManualPrintLabelRequest
             {
                 RelativePath = request.RelativePath,
-                Copies = request.Copies
+                Copies = request.Copies,
+                PaperSize = request.PaperSize,
+                Kg = request.Kg,
+                ExpiryDate = request.ExpiryDate,
+                LotNumber = request.LotNumber,
+                DateFormat = request.DateFormat,
+                ExpiryOffsetMonths = request.ExpiryOffsetMonths
             });
 
             printResult.PaperSize = request.PaperSize;
@@ -403,5 +495,119 @@ namespace Printuesi.Server.Services
 
             return path + Path.DirectorySeparatorChar;
         }
-    }
+
+		public async Task<ManualTestLabelResponse> TestLabelAsync(ManualTestLabelRequest request)
+		{
+			if (request == null)
+				throw new ArgumentNullException(nameof(request));
+
+			if (string.IsNullOrWhiteSpace(request.RelativePath))
+				throw new ArgumentException("RelativePath is required.", nameof(request.RelativePath));
+
+			var templatePath = await ResolveSafeLabelPathAsync(request.RelativePath);
+
+			var paperSize =
+				request.PaperSize ??
+				DetectPaperSize(Path.GetFileName(templatePath), ExtractProductCode(Path.GetFileName(templatePath))) ??
+				PaperSize.Normale;
+
+			var productionDate = DateTime.UtcNow;
+
+			var dateFormat = string.IsNullOrWhiteSpace(request.DateFormat)
+				? "dd/MM/yyyy"
+				: request.DateFormat.Trim();
+
+			var expiryOffsetMonths = request.ExpiryOffsetMonths.GetValueOrDefault(12);
+
+			var expiryDate = !string.IsNullOrWhiteSpace(request.ExpiryDate)
+				? request.ExpiryDate.Trim()
+				: productionDate.AddMonths(expiryOffsetMonths).ToString(dateFormat);
+
+			var lotNumber = !string.IsNullOrWhiteSpace(request.LotNumber)
+				? request.LotNumber.Trim()
+				: LotNumberHelper.Generate(productionDate);
+
+			var kg = request.Kg?.Trim() ?? string.Empty;
+
+			var outputPath = GetManualOutputPath(templatePath);
+
+			var placeholders = new Dictionary<string, string>
+	{
+		{ "EXP", expiryDate },
+		{ "LOT", lotNumber }
+	};
+
+			if (!string.IsNullOrWhiteSpace(kg))
+				placeholders["KG"] = kg;
+
+			var clientFolder = GetClientFolder(request.RelativePath);
+			var useWhiteText = ClientUsesWhiteText(clientFolder);
+
+			var response = new ManualTestLabelResponse
+			{
+				Success = false,
+				FileName = Path.GetFileName(templatePath),
+				TemplateRelativePath = request.RelativePath,
+				PaperSize = paperSize,
+				ExpiryDate = expiryDate,
+				LotNumber = lotNumber,
+				Kg = kg
+			};
+
+			_logger.LogInformation(
+				"Admin label test preparing PDF. Template: {Template}, Output: {Output}, PaperSize: {PaperSize}, Expiry: {Expiry}, Lot: {Lot}, KG: {Kg}",
+				templatePath,
+				outputPath,
+				paperSize,
+				expiryDate,
+				lotNumber,
+				kg);
+
+			var filled = await _pdfService.FillPdfPlaceholdersAsync(
+				templatePath,
+				placeholders,
+				outputPath,
+				useWhiteText);
+
+			if (!filled)
+			{
+				response.Message = "Template missing required placeholders: {{EXP}} and/or {{LOT}}. Test PDF was not generated.";
+				response.Errors.Add("Required placeholder not found in PDF template.");
+				return response;
+			}
+
+			var generatedRelativePath = Path
+				.GetRelativePath(_outputBasePath, outputPath)
+				.Replace('\\', '/');
+
+			response.Success = true;
+			response.GeneratedRelativePath = generatedRelativePath;
+			response.PreviewUrl =
+				$"/api/manual-printing/test-label/preview?relativePath={Uri.EscapeDataString(generatedRelativePath)}";
+			response.Message = "Test label generated successfully. No print was sent.";
+
+			return response;
+		}
+
+		public Task<string> ResolveSafeGeneratedOutputPathAsync(string relativePath)
+		{
+			if (string.IsNullOrWhiteSpace(relativePath))
+				throw new ArgumentException("relativePath is required.", nameof(relativePath));
+
+			var normalizedRelative = relativePath
+				.Replace('\\', Path.DirectorySeparatorChar)
+				.Replace('/', Path.DirectorySeparatorChar);
+
+			var basePath = Path.GetFullPath(_outputBasePath);
+			var fullPath = Path.GetFullPath(Path.Combine(basePath, normalizedRelative));
+
+			if (!fullPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+				throw new InvalidOperationException("Invalid generated file path.");
+
+			if (!File.Exists(fullPath))
+				throw new FileNotFoundException($"Generated test PDF not found: {relativePath}");
+
+			return Task.FromResult(fullPath);
+		}
+	}
 }

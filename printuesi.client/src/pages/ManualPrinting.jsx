@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { clientsApi } from "../api/clientsApi";
 import { labelsApi } from "../api/labelsApi";
+import { useAuth } from "../contexts/auth/useAuth";
 import { useLanguage } from "../contexts/language/useLanguage";
 import { paperSizeLabel } from "../utils/constants";
 
@@ -76,6 +77,17 @@ function createBatchItemId() {
 
 export default function ManualPrinting() {
     const { t } = useLanguage();
+    const { isAdmin, user } = useAuth();
+
+    const canUseAdminTools = Boolean(
+        isAdmin ||
+        user?.role === "Admin" ||
+        user?.Role === "Admin" ||
+        user?.role === "admin" ||
+        user?.Role === "admin"
+    );
+
+    const [testResult, setTestResult] = useState(null);
 
     const [clients, setClients] = useState([]);
     const [labels, setLabels] = useState([]);
@@ -285,6 +297,7 @@ export default function ManualPrinting() {
         setError("");
         setLabelsLoading(true);
         resetDriverConfirmation();
+        setTestResult(null);
 
         if (clientRequiresKg(client, variableKgClients) && kgOptions.length > 0) {
             setSelectedKg(kgOptions[0]);
@@ -307,6 +320,7 @@ export default function ManualPrinting() {
         setSelectedLabel(label);
         setMessage("");
         setError("");
+        setTestResult(null);
 
         const detectedPaper =
             getValue(label, "detectedPaperSize", "DetectedPaperSize") ||
@@ -322,7 +336,7 @@ export default function ManualPrinting() {
         }
     };
 
-    const validateSelectedLabel = ({ requireCopies }) => {
+    const validateSelectedLabel = ({ requireCopies, requireDriver = true }) => {
         if (!selectedClient) {
             setError("Please select a client first.");
             return false;
@@ -343,7 +357,7 @@ export default function ManualPrinting() {
             return false;
         }
 
-        if (driverConfirmed !== "yes") {
+        if (requireDriver && driverConfirmed !== "yes") {
             setError("Please confirm that the correct driver is loaded before printing.");
             return false;
         }
@@ -407,6 +421,50 @@ export default function ManualPrinting() {
         }
     };
 
+    const handleAdminTestLabelPreview = async () => {
+        if (!validateSelectedLabel({ requireCopies: false, requireDriver: false })) {
+            return;
+        }
+
+        setActionLoading(true);
+        setError("");
+        setMessage("");
+        setPrintStage("Generating test label preview. No print will be sent...");
+        setTestResult(null);
+
+        try {
+            const result = await labelsApi.testLabel({
+                relativePath: selectedLabelRelativePath,
+                paperSize,
+                kg: selectedClientRequiresKg ? selectedKg : ""
+            });
+
+            setTestResult(result);
+            setPrintStage("");
+            setMessage(result.message || result.Message || "Test label generated. No print was sent.");
+
+            const generatedPath =
+                result.generatedRelativePath ||
+                result.GeneratedRelativePath;
+
+            if (generatedPath) {
+                window.open(labelsApi.getTestPreviewUrl(generatedPath), "_blank");
+            }
+        } catch (err) {
+            const message =
+                err?.data?.message ||
+                err?.data?.Message ||
+                err?.message ||
+                "Failed to generate test label.";
+
+            setPrintStage("");
+            setError(message);
+            window.alert(message);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handlePrintTestLabel = async () => {
         if (!validateSelectedLabel({ requireCopies: false })) return;
 
@@ -419,14 +477,22 @@ export default function ManualPrinting() {
             const result = await labelsApi.printLabel({
                 relativePath: selectedLabelRelativePath,
                 copies: 1,
+                paperSize,
                 kg: selectedClientRequiresKg ? selectedKg : ""
             });
 
             setPrintStage("");
             setMessage(result.message || result.Message || "Test label printed.");
         } catch (err) {
+            const message =
+                err?.data?.message ||
+                err?.data?.Message ||
+                err?.message ||
+                "Failed to print test label.";
+
             setPrintStage("");
-            setError(err.message || "Failed to print test label.");
+            setError(message);
+            window.alert(message);
         } finally {
             setActionLoading(false);
         }
@@ -444,14 +510,22 @@ export default function ManualPrinting() {
             const result = await labelsApi.printLabel({
                 relativePath: selectedLabelRelativePath,
                 copies: Number(copies),
+                paperSize,
                 kg: selectedClientRequiresKg ? selectedKg : ""
             });
 
             setPrintStage("");
             setMessage(result.message || result.Message || "Final print completed.");
         } catch (err) {
+            const message =
+                err?.data?.message ||
+                err?.data?.Message ||
+                err?.message ||
+                "Final print failed.";
+
             setPrintStage("");
-            setError(err.message || "Final print failed.");
+            setError(message);
+            window.alert(message);
         } finally {
             setActionLoading(false);
         }
@@ -559,6 +633,7 @@ export default function ManualPrinting() {
                 const result = await labelsApi.printLabel({
                     relativePath: item.relativePath,
                     copies: Number(item.copies),
+                    paperSize: item.paperSize,
                     kg: item.kg || ""
                 });
 
@@ -584,12 +659,14 @@ export default function ManualPrinting() {
                 current.filter((item) => !printedIds.includes(item.id))
             );
 
-            setPrintStage("");
-            setError(
+            const message =
                 printedIds.length > 0
                     ? `${printedIds.length} item(s) printed, then batch stopped: ${err.message}`
-                    : err.message || "Batch print failed."
-            );
+                    : err.message || "Batch print failed.";
+
+            setPrintStage("");
+            setError(message);
+            window.alert(message);
         } finally {
             setActionLoading(false);
         }
@@ -791,70 +868,70 @@ export default function ManualPrinting() {
                                 {selectedLabelClient && <small>{selectedLabelClient}</small>}
                             </div>
 
-                                <div
-                                    className={`last-driver-card ${lastDriverMatchesPaper ? "driver-ok" : "driver-warning"
-                                        }`}
-                                >
-                                    <div className="last-driver-main">
-                                        <span className="eyebrow">Last driver sent : </span>
-
-                                        {lastDriver ? (
-                                            <strong>{lastDriver.paperSize}</strong>
-                                        ) : (
-                                            <strong>No driver sent</strong>
-                                        )}
-                                    </div>
+                            <div
+                                className={`last-driver-card ${lastDriverMatchesPaper ? "driver-ok" : "driver-warning"
+                                    }`}
+                            >
+                                <div className="last-driver-main">
+                                    <span className="eyebrow">Last driver sent : </span>
 
                                     {lastDriver ? (
-                                        <div className="last-driver-date">
-                                            {formatDateTime(lastDriver.sentAt)}
-                                        </div>
+                                        <strong>{lastDriver.paperSize}</strong>
                                     ) : (
-                                        <div className="last-driver-date">
-                                            You can continue if the printer already has the correct driver.
-                                        </div>
-                                    )}
-
-                                    <div className="driver-confirm-box mt-3">
-                                        <label className="form-label mb-2">
-                                            Is the correct driver loaded for <strong>{paperSize}</strong>?
-                                        </label>
-
-                                        <div className="driver-confirm-actions">
-                                            <button
-                                                type="button"
-                                                className={`btn ${driverConfirmed === "yes"
-                                                        ? "btn-success"
-                                                        : "btn-outline-success"
-                                                    }`}
-                                                onClick={() => setDriverConfirmed("yes")}
-                                            >
-                                                Yes, continue
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                className={`btn ${driverConfirmed === "no"
-                                                        ? "btn-warning"
-                                                        : "btn-outline-warning"
-                                                    }`}
-                                                onClick={() => setDriverConfirmed("no")}
-                                            >
-                                                No, send driver
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {driverConfirmed === "no" && (
-                                        <button
-                                            className="btn btn-primary-gradient w-100 mt-3"
-                                            disabled={actionLoading}
-                                            onClick={handleSendDriver}
-                                        >
-                                            {actionLoading ? "Sending driver..." : `Send ${paperSize} Driver`}
-                                        </button>
+                                        <strong>No driver sent</strong>
                                     )}
                                 </div>
+
+                                {lastDriver ? (
+                                    <div className="last-driver-date">
+                                        {formatDateTime(lastDriver.sentAt)}
+                                    </div>
+                                ) : (
+                                    <div className="last-driver-date">
+                                        You can continue if the printer already has the correct driver.
+                                    </div>
+                                )}
+
+                                <div className="driver-confirm-box mt-3">
+                                    <label className="form-label mb-2">
+                                        Is the correct driver loaded for <strong>{paperSize}</strong>?
+                                    </label>
+
+                                    <div className="driver-confirm-actions">
+                                        <button
+                                            type="button"
+                                            className={`btn ${driverConfirmed === "yes"
+                                                    ? "btn-success"
+                                                    : "btn-outline-success"
+                                                }`}
+                                            onClick={() => setDriverConfirmed("yes")}
+                                        >
+                                            Yes, continue
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            className={`btn ${driverConfirmed === "no"
+                                                    ? "btn-warning"
+                                                    : "btn-outline-warning"
+                                                }`}
+                                            onClick={() => setDriverConfirmed("no")}
+                                        >
+                                            No, send driver
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {driverConfirmed === "no" && (
+                                    <button
+                                        className="btn btn-primary-gradient w-100 mt-3"
+                                        disabled={actionLoading}
+                                        onClick={handleSendDriver}
+                                    >
+                                        {actionLoading ? "Sending driver..." : `Send ${paperSize} Driver`}
+                                    </button>
+                                )}
+                            </div>
 
                             <div className="mb-3">
                                 <label className="form-label">Paper type</label>
@@ -906,6 +983,17 @@ export default function ManualPrinting() {
                             )}
 
                             <div className="manual-print-actions">
+                                {canUseAdminTools && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline-info w-100"
+                                        disabled={actionLoading || !selectedLabel}
+                                        onClick={handleAdminTestLabelPreview}
+                                    >
+                                        Test Label Preview - No Print
+                                    </button>
+                                )}
+
                                 <button
                                     className="btn btn-success w-100"
                                     disabled={!canPrintSelectedLabel}
@@ -930,6 +1018,48 @@ export default function ManualPrinting() {
                                     Add Selected Label to Batch
                                 </button>
                             </div>
+
+                            {canUseAdminTools && testResult && (
+                                <div className="alert alert-info mt-3">
+                                    <strong>Test label generated.</strong>
+
+                                    <div className="small mt-2">
+                                        Expiry:{" "}
+                                        <strong>
+                                            {testResult.expiryDate || testResult.ExpiryDate}
+                                        </strong>
+                                        {" | "}
+                                        LOT:{" "}
+                                        <strong>
+                                            {testResult.lotNumber || testResult.LotNumber}
+                                        </strong>
+                                        {testResult.kg || testResult.Kg ? (
+                                            <>
+                                                {" | "}
+                                                KG:{" "}
+                                                <strong>
+                                                    {testResult.kg || testResult.Kg}
+                                                </strong>
+                                            </>
+                                        ) : null}
+                                    </div>
+
+                                    {(testResult.generatedRelativePath ||
+                                        testResult.GeneratedRelativePath) && (
+                                            <a
+                                                className="btn btn-sm btn-outline-info mt-2"
+                                                href={labelsApi.getTestPreviewUrl(
+                                                    testResult.generatedRelativePath ||
+                                                    testResult.GeneratedRelativePath
+                                                )}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                Open generated PDF
+                                            </a>
+                                        )}
+                                </div>
+                            )}
 
                             <div className="manual-warning mt-3">
                                 Test print sends 1 label. Final print sends the selected number of copies.

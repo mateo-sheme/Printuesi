@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Printuesi.Server.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Printuesi.Server.Controllers
 {
@@ -222,6 +223,80 @@ namespace Printuesi.Server.Controllers
                     Message = "Error printing manual label with driver.",
                     Errors = new List<string> { ex.Message }
                 });
+            }
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("test-label")]
+        public async Task<ActionResult<ManualTestLabelResponse>> TestLabel(
+    [FromBody] ManualTestLabelRequest request)
+        {
+            try
+            {
+                var result = await _manualPrintingService.TestLabelAsync(request);
+
+                if (!result.Success)
+                    return BadRequest(result);
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ManualTestLabelResponse
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Errors = new List<string> { ex.Message }
+                });
+            }
+            catch (FileNotFoundException ex)
+            {
+                return NotFound(new ManualTestLabelResponse
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Errors = new List<string> { ex.Message }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error testing manual label");
+
+                return StatusCode(500, new ManualTestLabelResponse
+                {
+                    Success = false,
+                    Message = "Error testing label.",
+                    Errors = new List<string> { ex.Message }
+                });
+            }
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("test-label/preview")]
+        public async Task<IActionResult> PreviewTestLabel([FromQuery] string relativePath)
+        {
+            try
+            {
+                var fullPath = await _manualPrintingService.ResolveSafeGeneratedOutputPathAsync(relativePath);
+
+                var stream = new FileStream(
+                    fullPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+
+                Response.Headers["Content-Disposition"] = "inline";
+
+                return File(stream, "application/pdf", enableRangeProcessing: true);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error previewing tested label");
+                return BadRequest(new { message = ex.Message });
             }
         }
     }

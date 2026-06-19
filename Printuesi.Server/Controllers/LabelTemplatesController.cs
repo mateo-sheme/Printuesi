@@ -224,7 +224,7 @@ namespace Printuesi.Server.Controllers
         }
 
         /// <summary>
-        /// Validate PDF file has required placeholders ({{EXPIRY_DATE}}, {{LOT_NUMBER}})
+        /// Validate PDF file has required placeholders ({{EXP}}, {{LOT}})
         /// </summary>
         [HttpPost("validate-pdf")]
         public async Task<ActionResult<ValidatePdfResponse>> ValidatePdf(IFormFile pdfFile)

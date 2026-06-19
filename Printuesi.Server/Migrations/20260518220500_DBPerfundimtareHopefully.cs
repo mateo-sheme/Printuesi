@@ -112,7 +112,7 @@ namespace Printuesi.Server.Migrations
                     print_job_object_id = table.Column<string>(type: "text", nullable: false),
                     quantity_requested = table.Column<int>(type: "integer", nullable: false),
                     quantity_printed = table.Column<int>(type: "integer", nullable: false),
-                    expiry_date = table.Column<string>(type: "text", nullable: false),
+                    EXP = table.Column<string>(type: "text", nullable: false),
                     lot_num = table.Column<string>(type: "text", nullable: true),
                     status = table.Column<int>(type: "integer", nullable: false),
                     print_job_id = table.Column<string>(type: "text", nullable: false),

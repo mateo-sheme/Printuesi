@@ -244,7 +244,7 @@ namespace Printuesi.Server.Services
 
                         foreach (Match match in matches)
                         {
-                            string placeholder = match.Value;  // "{{EXPIRY_DATE}}"
+                            string placeholder = match.Value;  // "{{EXP}}"
                             if (!foundPlaceholders.Contains(placeholder))
                                 foundPlaceholders.Add(placeholder);
                         }
@@ -252,11 +252,11 @@ namespace Printuesi.Server.Services
                 }
 
                 // Validate required placeholders exist
-                if (!foundPlaceholders.Contains("{{EXPIRY_DATE}}"))
-                    throw new InvalidOperationException("PDF must contain {{EXPIRY_DATE}} placeholder");
+                if (!foundPlaceholders.Contains("{{EXP}}"))
+                    throw new InvalidOperationException("PDF must contain {{EXP}} placeholder");
 
-                if (!foundPlaceholders.Contains("{{LOT_NUMBER}}"))
-                    throw new InvalidOperationException("PDF must contain {{LOT_NUMBER}} placeholder");
+                if (!foundPlaceholders.Contains("{{LOT}}"))
+                    throw new InvalidOperationException("PDF must contain {{LOT}} placeholder");
 
                 _logger.LogInformation($"PDF validation passed. Found placeholders: {string.Join(", ", foundPlaceholders)}");
 

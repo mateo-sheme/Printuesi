@@ -104,10 +104,10 @@ namespace Printuesi.Server.Migrations
                         .HasColumnType("text")
                         .HasColumnName("print_job_object_id");
 
-                    b.Property<string>("Expiry_Date")
+                    b.Property<string>("EXP")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("expiry_date");
+                        .HasColumnName("EXP");
 
                     b.Property<string>("LabelID")
                         .IsRequired()

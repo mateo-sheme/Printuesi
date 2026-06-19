@@ -127,7 +127,7 @@ namespace Printuesi.Server.Services
                     LabelID = template?.LabelID,
                     Quantity_Requested = item.Quantity,
                     Quantity_Printed = 0,
-                    Expiry_Date = expiryFormatted,
+                    EXP = expiryFormatted,
                     Lot_Num = lotNumber,
                     Status = Status.Pending
                 };
@@ -548,8 +548,8 @@ namespace Printuesi.Server.Services
                 templatePath,
                 new Dictionary<string, string>
                 {
-                    { "EXPIRY_DATE", item.Expiry_Date },
-                    { "LOT_NUMBER", item.Lot_Num ?? string.Empty }
+                    { "EXP", item.EXP },
+                    { "LOT", item.Lot_Num ?? string.Empty }
                 },
                 outputPath,
                 useWhiteText);
@@ -945,7 +945,7 @@ namespace Printuesi.Server.Services
                             PaperSize = paperSize,
                             QuantityRequested = o.Quantity_Requested,
                             QuantityPrinted = o.Quantity_Printed,
-                            ExpiryDate = o.Expiry_Date,
+                            ExpiryDate = o.EXP,
                             LotNumber = o.Lot_Num ?? string.Empty,
                             Status = o.Status,
                             LabelFilePath = labelPath,
