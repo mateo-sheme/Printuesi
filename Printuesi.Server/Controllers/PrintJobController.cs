@@ -25,8 +25,9 @@ namespace Printuesi.Server.Controllers
         /// </summary>
         [HttpPost("create-from-order")]
         public async Task<ActionResult<PrintJobResponse>> CreateFromOrder(
-            IFormFile orderPdf,
-            [FromQuery] string createdByUserID)
+            [FromForm] IFormFile orderPdf,
+            [FromForm] string createdByUserID,
+            [FromForm] bool includeRrethi = false)
         {
             try
             {
@@ -39,7 +40,7 @@ namespace Printuesi.Server.Controllers
                 if (string.IsNullOrWhiteSpace(createdByUserID))
                     return BadRequest(new { message = "createdByUserID is required." });
 
-                var result = await _printJobService.CreateFromOrderAsync(orderPdf, createdByUserID);
+                var result = await _printJobService.CreateFromOrderAsync(orderPdf, createdByUserID, includeRrethi);
 
                 return CreatedAtAction(
                     nameof(GetPrintJob),
@@ -115,6 +116,88 @@ namespace Printuesi.Server.Controllers
             }
         }
 
+        [HttpGet("{printJobID}/generated-pdfs")]
+        public async Task<ActionResult<List<GeneratedJobPdfResponse>>> GetGeneratedPdfs(
+    string printJobID)
+        {
+            try
+            {
+                var result = await _printJobService.GetGeneratedPdfsAsync(printJobID);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading generated PDFs for job {JobID}", printJobID);
+
+                return StatusCode(500, new
+                {
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{printJobID}/generated-pdfs/{printJobObjectID}/prepare")]
+        public async Task<ActionResult<GeneratedJobPdfResponse>> PrepareGeneratedPdf(
+    string printJobID,
+    string printJobObjectID,
+    [FromQuery] string? kg = null)
+        {
+            try
+            {
+                var result = await _printJobService.PrepareGeneratedPdfAsync(
+                    printJobID,
+                    printJobObjectID,
+                    kg);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Error preparing generated PDF for job {JobID}, object {ObjectID}",
+                    printJobID,
+                    printJobObjectID);
+
+                return StatusCode(500, new
+                {
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("{printJobID}/generated-pdfs/{printJobObjectID}/preview")]
+        public async Task<IActionResult> PreviewGeneratedPdf(
+    string printJobID,
+    string printJobObjectID)
+        {
+            try
+            {
+                var fullPath = await _printJobService.ResolveGeneratedPdfPathAsync(
+                    printJobID,
+                    printJobObjectID);
+
+                var stream = new FileStream(
+                    fullPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+
+                Response.Headers["Content-Disposition"] = "inline";
+
+                return File(stream, "application/pdf", enableRangeProcessing: true);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error previewing generated PDF");
+
+                return BadRequest(new { message = ex.Message });
+            }
+        }
         /// <summary>
         /// User confirms paper was physically changed.
         /// Backend sends the driver/settings file for that paper size.
@@ -150,9 +233,9 @@ namespace Printuesi.Server.Controllers
 
         [HttpPost("{printJobID}/print-test")]
         public async Task<ActionResult<PrintGroupResult>> PrintTest(
-    string printJobID,
-    [FromQuery] PaperSize paperSize,
-    [FromQuery] string? kg = null)
+            string printJobID,
+            [FromQuery] PaperSize paperSize,
+            [FromQuery] string? kg = null)
         {
             try
             {
@@ -170,27 +253,6 @@ namespace Printuesi.Server.Controllers
             }
         }
 
-        [HttpPost("{printJobID}/reprint-test")]
-        public async Task<ActionResult<PrintGroupResult>> ReprintTest(
-            string printJobID,
-            [FromQuery] PaperSize paperSize,
-            [FromQuery] string? kg = null)
-        {
-            try
-            {
-                var result = await _printJobService.ReprintTestAsync(printJobID, paperSize, kg);
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error reprinting test for job {ID}", printJobID);
-                return StatusCode(500, new { message = "Error reprinting test.", error = ex.Message });
-            }
-        }
 
         [HttpPost("{printJobID}/start-group")]
         public async Task<ActionResult<PrintGroupResult>> StartGroup(
@@ -211,6 +273,30 @@ namespace Printuesi.Server.Controllers
             {
                 _logger.LogError(ex, "Error starting group for job {ID}", printJobID);
                 return StatusCode(500, new { message = "Error starting print group.", error = ex.Message });
+            }
+        }
+
+        [HttpPost("{printJobID}/stop-printing")]
+        public async Task<ActionResult<PrintGroupResult>> StopPrinting(string printJobID)
+        {
+            try
+            {
+                var result = await _printJobService.StopPrintingAsync(printJobID);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error stopping print job {ID}", printJobID);
+
+                return StatusCode(500, new
+                {
+                    message = "Error stopping print job.",
+                    error = ex.Message
+                });
             }
         }
 
@@ -274,6 +360,34 @@ namespace Printuesi.Server.Controllers
                 return StatusCode(500, new
                 {
                     message = "Error cancelling print job.",
+                    error = ex.Message
+                });
+            }
+        }
+
+        [HttpDelete("{printJobID}/delete")]
+        public async Task<IActionResult> DeletePrintJob(string printJobID)
+        {
+            try
+            {
+                var deleted = await _printJobService.DeletePrintJobAsync(printJobID);
+
+                if (!deleted)
+                    return NotFound(new { message = $"Print job '{printJobID}' not found." });
+
+                return Ok(new { message = "Print job deleted." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting print job {ID}", printJobID);
+
+                return StatusCode(500, new
+                {
+                    message = "Error deleting print job.",
                     error = ex.Message
                 });
             }

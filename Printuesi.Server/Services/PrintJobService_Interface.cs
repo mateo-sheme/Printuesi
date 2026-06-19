@@ -1,4 +1,5 @@
 ﻿using Printuesi.Server.Enums;
+using Microsoft.AspNetCore.Http;
 
 namespace Printuesi.Server.Services
 {
@@ -7,7 +8,7 @@ namespace Printuesi.Server.Services
         /// <summary>
         /// Upload order PDF, scan it, create print job and print job objects.
         /// </summary>
-        Task<PrintJobResponse> CreateFromOrderAsync(IFormFile orderPdf, string createdByUserID);
+        Task<PrintJobResponse> CreateFromOrderAsync(IFormFile orderPdf, string createdByUserID, bool includeRrethi);
 
         /// <summary>
         /// Get one print job by ID.
@@ -33,11 +34,6 @@ namespace Printuesi.Server.Services
         Task<PrintGroupResult> PrintTestAsync(string printJobID, PaperSize paperSize, string? kg = null );
 
         /// <summary>
-        /// Reprints one test label.
-        /// </summary>
-        Task<PrintGroupResult> ReprintTestAsync(string printJobID, PaperSize paperSize, string? kg = null);
-
-        /// <summary>
         /// Starts the real production group.
         /// Mini/Rrethi require a previous successful test.
         /// Normale/Prodhim can start without test.
@@ -53,9 +49,22 @@ namespace Printuesi.Server.Services
         /// <summary>
         /// Cancel print job.
         /// </summary>
+        /// 
         Task<bool> CancelPrintJobAsync(string printJobID);
+        Task<bool> DeletePrintJobAsync(string printJobID);
 
+        Task<PrintGroupResult> StopPrintingAsync(string printJobID);
 
+        Task<List<GeneratedJobPdfResponse>> GetGeneratedPdfsAsync(string printJobID);
+
+        Task<GeneratedJobPdfResponse> PrepareGeneratedPdfAsync(
+            string printJobID,
+            string printJobObjectID,
+            string? kg = null);
+
+        Task<string> ResolveGeneratedPdfPathAsync(
+            string printJobID,
+            string printJobObjectID);
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────────────
@@ -111,5 +120,22 @@ namespace Printuesi.Server.Services
         public bool NeedsPaperChange { get; set; }
         public bool NeedsTestConfirm { get; set; }
         public string? Message { get; set; }
+    }
+
+    public class GeneratedJobPdfResponse
+    {
+        public string PrintJobObjectID { get; set; } = string.Empty;
+        public string ProductCode { get; set; } = string.Empty;
+        public string ProductName { get; set; } = string.Empty;
+        public PaperSize PaperSize { get; set; }
+
+        public int QuantityRequested { get; set; }
+        public int QuantityPrinted { get; set; }
+
+        public string ExpiryDate { get; set; } = string.Empty;
+        public string LotNumber { get; set; } = string.Empty;
+
+        public bool PdfExists { get; set; }
+        public string PreviewUrl { get; set; } = string.Empty;
     }
 }

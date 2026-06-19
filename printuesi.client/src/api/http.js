@@ -87,10 +87,16 @@ export async function apiBlobRequest(path, options = {}) {
 
             if (contentType.includes("application/json")) {
                 const data = await response.json();
-                message = data?.message || data?.title || data?.error || message;
+                message =
+                    data?.message ||
+                    data?.title ||
+                    data?.error ||
+                    message;
             } else {
                 const text = await response.text();
-                if (text) message = text;
+                if (text) {
+                    message = text;
+                }
             }
         } catch {
             // Keep default message.

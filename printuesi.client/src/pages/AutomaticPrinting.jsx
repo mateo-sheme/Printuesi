@@ -26,6 +26,8 @@ export default function AutomaticPrinting() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
+    const [includeRrethi, setIncludeRrethi] = useState(false);
+
     const refreshJob = async (printJobID) => {
         const refreshed = await printJobsApi.getById(printJobID);
         setJob(refreshed);
@@ -48,10 +50,10 @@ export default function AutomaticPrinting() {
 
         setLoading(true);
         setError("");
-        setLastResult(null);
+        setLastResult(null);    
 
         try {
-            const created = await printJobsApi.createFromOrder(file, user.userID);
+            const created = await printJobsApi.createFromOrder(file, user.userID, includeRrethi);
             setJob(created);
 
             const firstGroup = getValue(created, "groups", "Groups", [])[0];
@@ -156,6 +158,20 @@ export default function AutomaticPrinting() {
                         </div>
                     )}
 
+                    <div className="form-check mt-3">
+                        <input
+                            className="form-check-input"
+                            type="checkbox"
+                            id="includeRrethi"
+                            checked={includeRrethi}
+                            onChange={(event) => setIncludeRrethi(event.target.checked)}
+                        />
+
+                        <label className="form-check-label" htmlFor="includeRrethi">
+                            Printim me etiketë rreth përsipër?
+                        </label>
+                    </div>
+
                     <button className="btn btn-primary-gradient mt-3" disabled={loading}>
                         {loading ? t("loading") : t("createJob")}
                     </button>
@@ -231,14 +247,6 @@ export default function AutomaticPrinting() {
                             onClick={() => runAction(printJobsApi.printTest, { sendKg: true })}
                         >
                             Printo testin
-                        </button>
-
-                        <button
-                            className="btn btn-warning"
-                            disabled={loading || !activePaperSize}
-                            onClick={() => runAction(printJobsApi.reprintTest, { sendKg: true })}
-                        >
-                            {t("reprintTest")}
                         </button>
 
                         <button

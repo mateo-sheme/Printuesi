@@ -97,6 +97,68 @@ function getItemBadgeClass(requested, printed) {
         : "pending";
 }
 
+function getAllJobItems(job) {
+    return getGroups(job).flatMap((group) => getGroupItems(group));
+}
+
+function getTotalPrinted(job) {
+    return getAllJobItems(job).reduce((total, item) => {
+        const printed = Number(
+            getValue(item, "quantityPrinted", "QuantityPrinted", 0)
+        ) || 0;
+
+        return total + printed;
+    }, 0);
+}
+
+function canDeleteJobBeforePrinting(job) {
+    if (!job) return false;
+
+    const status = getStatusKey(getJobStatus(job));
+    const totalPrinted = getTotalPrinted(job);
+
+    const deletableStatuses = ["pending", "cancelled", "stopped"];
+
+    return deletableStatuses.includes(status) && totalPrinted === 0;
+}
+
+function canCancelJob(job) {
+    if (!job) return false;
+
+    const status = getStatusKey(getJobStatus(job));
+
+    return status !== "completed" && status !== "cancelled";
+}
+
+function canStopJob(job) {
+    if (!job) return false;
+
+    const status = getStatusKey(getJobStatus(job));
+
+    return status === "in progress" || status === "stopped";
+}
+
+function getDeleteDisabledReason(job) {
+    if (!job) return "No job selected.";
+
+    const status = getStatusKey(getJobStatus(job));
+    const totalPrinted = getTotalPrinted(job);
+
+    if (totalPrinted > 0) {
+        return `Cannot delete because ${totalPrinted} labels have already been printed.`;
+    }
+
+    if (status === "completed") {
+        return "Cannot delete because this job is completed.";
+    }
+
+    if (!["pending", "cancelled", "stopped"].includes(status)) {
+        return `Cannot delete because job status is ${status}. Stop or cancel it first.`;
+    }
+
+    return "";
+}
+
 export default function PrintJobs() {
     const { t } = useLanguage();
 
@@ -108,10 +170,57 @@ export default function PrintJobs() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [stopLoading, setStopLoading] = useState(false);
+    const [productionActive, setProductionActive] = useState(false);
 
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     const [lastResult, setLastResult] = useState(null);
+
+    const previewGeneratedPdf = async (printJobObjectID) => {
+        if (!selectedJob) return;
+
+        const printJobID = getJobId(selectedJob);
+
+        setActionLoading(true);
+        setError("");
+
+        const previewWindow = window.open("", "_blank");
+
+        try {
+            await printJobsApi.prepareGeneratedPdf(printJobID, printJobObjectID);
+
+            const blob = await printJobsApi.getGeneratedPdfPreviewBlob(
+                printJobID,
+                printJobObjectID
+            );
+
+            const blobUrl = URL.createObjectURL(blob);
+
+            if (previewWindow) {
+                previewWindow.location.href = blobUrl;
+            } else {
+                window.open(blobUrl, "_blank");
+            }
+
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+            }, 60_000);
+        } catch (err) {
+            if (previewWindow) {
+                previewWindow.close();
+            }
+
+            const message =
+                err?.data?.message ||
+                err?.message ||
+                "Failed to preview generated PDF.";
+
+            setError(message);
+            window.alert(message);
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
     async function loadJobs(nextStatus = statusFilter) {
         setLoading(true);
@@ -231,6 +340,11 @@ export default function PrintJobs() {
         }
 
         const printJobID = getJobId(selectedJob);
+        const isStartGroup = action === printJobsApi.startGroup;
+
+        if (isStartGroup) {
+            setProductionActive(true);
+        }
 
         setActionLoading(true);
         setError("");
@@ -244,6 +358,7 @@ export default function PrintJobs() {
 
             if (result.success === false || result.Success === false) {
                 const errors = result.errors || result.Errors || [];
+
                 setError(
                     result.message ||
                     result.Message ||
@@ -263,6 +378,10 @@ export default function PrintJobs() {
             window.alert(errorMessage);
         } finally {
             setActionLoading(false);
+
+            if (isStartGroup) {
+                setProductionActive(false);
+            }
         }
     };
 
@@ -363,6 +482,52 @@ export default function PrintJobs() {
         }
     };
 
+    const deleteSelectedJob = async () => {
+        if (!selectedJob) {
+            setError("Select a print job first.");
+            return;
+        }
+
+        if (!canDeleteJobBeforePrinting(selectedJob)) {
+            setError("This job cannot be deleted because printing has already started or the job is no longer pending.");
+            return;
+        }
+
+        const printJobID = getJobId(selectedJob);
+
+        const confirmed = window.confirm(
+            "Delete this print job permanently? This is only allowed before printing starts."
+        );
+
+        if (!confirmed) return;
+
+        setActionLoading(true);
+        setError("");
+        setMessage("");
+        setLastResult(null);
+
+        try {
+            await printJobsApi.deleteJob(printJobID);
+
+            setMessage("Print job deleted.");
+            setSelectedJob(null);
+            setActivePaperSize("");
+
+            const updated = await printJobsApi.getAll(statusFilter);
+            setJobs(Array.isArray(updated) ? updated : []);
+        } catch (err) {
+            const errorMessage =
+                err?.data?.message ||
+                err?.message ||
+                "Failed to delete print job.";
+
+            setError(errorMessage);
+            window.alert(errorMessage);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const selectedJobID = selectedJob ? getJobId(selectedJob) : "";
     const selectedClientName = selectedJob
         ? getValue(selectedJob, "clientName", "ClientName")
@@ -372,8 +537,14 @@ export default function PrintJobs() {
         ? getValue(selectedJob, "createdAt", "CreatedAt")
         : "";
 
-    const canRunActions = selectedJob && activePaperSize && !isFinishedJob(selectedJob);
-    const canStop = selectedJob && !isFinishedJob(selectedJob) && !stopLoading;
+    const canRunActions = selectedJob && activePaperSize && canCancelJob(selectedJob);
+    const canStop =
+        selectedJob &&
+        !isFinishedJob(selectedJob) &&
+        (productionActive || canStopJob(selectedJob)) &&
+        !stopLoading;
+    const canCancel = canCancelJob(selectedJob) && !actionLoading && !stopLoading;
+    const canDelete = canDeleteJobBeforePrinting(selectedJob) && !actionLoading && !stopLoading;
 
     return (
         <div className="page-stack">
@@ -512,28 +683,39 @@ export default function PrintJobs() {
                                     </p>
                                 </div>
 
-                                <div className="job-danger-actions">
-                                    <button
-                                        className="btn btn-danger job-square-danger"
-                                        disabled={!canStop}
-                                        onClick={stopSelectedPrinting}
-                                    >
-                                        {stopLoading ? "Stopping..." : "Stop printimin"}
-                                    </button>
+                                    <div className="job-actions-stack">
+                                        <div className="job-danger-actions">
+                                            <button
+                                                className="btn btn-danger job-square-danger"
+                                                disabled={!canStop}
+                                                onClick={stopSelectedPrinting}
+                                            >
+                                                {stopLoading ? "Stopping..." : "Stop printimin"}
+                                            </button>
 
-                                    <button
-                                        className="btn btn-outline-danger job-square-danger"
-                                        disabled={
-                                            !selectedJob ||
-                                            isFinishedJob(selectedJob) ||
-                                            actionLoading ||
-                                            stopLoading
-                                        }
-                                        onClick={cancelSelectedJob}
-                                    >
-                                        Anulo punën
-                                    </button>
-                                </div>
+                                            <button
+                                                className="btn btn-outline-danger job-square-danger"
+                                                disabled={!canCancel}
+                                                onClick={cancelSelectedJob}
+                                            >
+                                                Anulo punën
+                                            </button>
+
+                                            <button
+                                                className="btn btn-outline-danger job-square-danger"
+                                                disabled={!canDelete}
+                                                onClick={deleteSelectedJob}
+                                            >
+                                                Fshi punën
+                                            </button>
+                                        </div>
+
+                                        {selectedJob && !canDelete && (
+                                            <div className="delete-disabled-reason">
+                                                {getDeleteDisabledReason(selectedJob)}
+                                            </div>
+                                        )}
+                                    </div>
                             </div>
 
                             <div className="automatic-action-shell mt-3 mb-3">
@@ -633,6 +815,7 @@ export default function PrintJobs() {
                                                 <th>Code</th>
                                                 <th>Product</th>
                                                 <th>Paper</th>
+                                                <th>PDF</th>
                                                 <th>Requested</th>
                                                 <th>Printed</th>
                                                 <th>Expiry</th>
@@ -725,6 +908,17 @@ export default function PrintJobs() {
                                                             <span className="paper-mini-badge">
                                                                 {rowPaperSize}
                                                             </span>
+                                                        </td>
+
+                                                        <td>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-sm btn-soft"
+                                                                disabled={!id || actionLoading}
+                                                                onClick={() => previewGeneratedPdf(id)}
+                                                            >
+                                                                Preview PDF
+                                                            </button>
                                                         </td>
 
                                                         <td>{requested}</td>

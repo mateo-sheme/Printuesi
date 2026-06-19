@@ -93,13 +93,23 @@ namespace Printuesi.Server.Controllers
 
         [HttpPost("send-driver")]
         public async Task<ActionResult<ManualDriverResponse>> SendDriver(
-    [FromBody] ManualSendDriverRequest request)
+    [FromBody] ManualSendDriverRequest? request)
         {
             try
             {
+                if (request == null)
+                {
+                    return BadRequest(new ManualDriverResponse
+                    {
+                        Success = false,
+                        Message = "Request body is required.",
+                        Errors = new List<string> { "Request body is required." }
+                    });
+                }
+
                 _logger.LogInformation(
                     "Manual send-driver requested. PaperSize: {PaperSize}",
-                    request?.PaperSize);
+                    request.PaperSize);
 
                 var result = await _manualPrintingService.SendDriverAsync(request);
 

@@ -1278,6 +1278,22 @@ textarea {
         color: #431407;
     }
 
+.job-actions-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.delete-disabled-reason {
+    max-width: 430px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-align: right;
+}
+
+
+
 /* ---------- Print Job table safety ---------- */
 
 .job-detail-panel .table-responsive {
@@ -1563,5 +1579,17 @@ textarea {
 
     .printer-hero .hero-actions {
         max-width: 100%;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .job-actions-stack {
+        width: 100%;
+        align-items: stretch;
+    }
+
+    .delete-disabled-reason {
+        max-width: 100%;
+        text-align: left;
     }
 }
