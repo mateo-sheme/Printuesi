@@ -244,6 +244,13 @@ export default function Dashboard() {
                                     </div>
                                 </Link>
                             )}
+                            {isAdmin && (
+                                <Link to="/users" className="sidebar-link">
+                                    <span className="sidebar-icon">👤</span>
+                                    <span>Përdoruesit</span>
+                                </Link>
+                            )}
+
                         </div>
                     </div>
                 </div>

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Printuesi.Server.Enums;
 using Printuesi.Server.Services;
 
 namespace Printuesi.Server.Controllers
@@ -8,10 +9,14 @@ namespace Printuesi.Server.Controllers
     public class ClientsController : ControllerBase
     {
         private readonly ClientService_Interface _clientService;
+        private readonly ILogger<ClientsController> _logger;
 
-        public ClientsController(ClientService_Interface clientService)
+        public ClientsController(
+            ClientService_Interface clientService,
+            ILogger<ClientsController> logger)
         {
             _clientService = clientService;
+            _logger = logger;
         }
 
         /// <summary>
@@ -137,6 +142,32 @@ namespace Printuesi.Server.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "An error occurred while deleting the client.", error = ex.Message });
+            }
+        }
+
+        [HttpGet("{clientID}/print-jobs")]
+        public async Task<ActionResult<List<ClientPrintJobHistoryResponse>>> GetClientPrintJobs(
+    string clientID,
+    [FromQuery] Status? status = null)
+        {
+            try
+            {
+                var result = await _clientService.GetClientPrintJobsAsync(clientID, status);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading print jobs for client {ClientID}", clientID);
+
+                return StatusCode(500, new
+                {
+                    message = "Error loading client print jobs.",
+                    error = ex.Message
+                });
             }
         }
     }

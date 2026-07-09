@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Printuesi.Server.Data;
 using Printuesi.Server.Entities;
+using Printuesi.Server.Enums;
 using Printuesi.Server.Helpers;
 
 namespace Printuesi.Server.Services
@@ -145,6 +146,57 @@ namespace Printuesi.Server.Services
             await _db.SaveChangesAsync();
 
             return true;
+        }
+
+        public async Task<List<ClientPrintJobHistoryResponse>> GetClientPrintJobsAsync(
+    string clientID,
+    Status? status = null)
+        {
+            var clientExists = await _db.Clients.AnyAsync(c => c.ClientID == clientID);
+
+            if (!clientExists)
+                throw new InvalidOperationException($"Client '{clientID}' not found.");
+
+            var query = _db.PrintJobs
+                .Include(j => j.Client)
+                .Include(j => j.PrintJobObjects)
+                    .ThenInclude(o => o.LabelTemplate)
+                .Where(j => j.ClientID == clientID)
+                .AsQueryable();
+
+            if (status.HasValue)
+                query = query.Where(j => j.Status == status.Value);
+
+            var jobs = await query
+                .OrderByDescending(j => j.CreatedAt)
+                .ToListAsync();
+
+            return jobs.Select(job =>
+            {
+                var paperSizes = job.PrintJobObjects
+                    .Select(o => o.LabelTemplate != null
+                        ? o.LabelTemplate.PaperSize.ToString()
+                        : "Unknown")
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+
+                return new ClientPrintJobHistoryResponse
+                {
+                    PrintJobID = job.PrintJobID,
+                    ClientID = job.ClientID,
+                    ClientName = job.Client?.Name ?? string.Empty,
+                    Status = job.Status,
+                    CreatedAt = job.CreatedAt,
+                    CompletedAt = job.CompletedAt,
+                    TotalRequested = job.PrintJobObjects.Sum(o => o.Quantity_Requested),
+                    TotalPrinted = job.PrintJobObjects.Sum(o => o.Quantity_Printed),
+                    GroupsCount = paperSizes.Count,
+                    PaperSizes = paperSizes,
+                    CreatedBy = job.CreatedBy,
+                    Notes = job.Notes
+                };
+            }).ToList();
         }
     }
 }

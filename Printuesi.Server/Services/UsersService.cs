@@ -18,148 +18,209 @@ namespace Printuesi.Server.Services
             _hasher = new PasswordHasher<Users>();
         }
 
-        public async Task<UserResponse> CreateUserAsync(CreateUserRequest request)
+        public async Task<List<UserResponse>> GetAllUsersAsync()
         {
-            // Validation
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-            if (string.IsNullOrWhiteSpace(request.Name))
-                throw new ArgumentException("Name is required.", nameof(request.Name));
-            if (string.IsNullOrWhiteSpace(request.Password))
-                throw new ArgumentException("Password is required.", nameof(request.Password));
-            if (string.IsNullOrWhiteSpace(request.Role))
-                throw new ArgumentException("Role is required.", nameof(request.Role));
+            var users = await _db.Users
+                .OrderBy(u => u.Name)
+                .ToListAsync();
 
-            // Check if user already exists
-            var existingUser = await _db.Users
-                .FirstOrDefaultAsync(u => u.Name.ToLower() == request.Name.ToLower());
-
-            if (existingUser != null)
-                throw new InvalidOperationException($"A user with the name '{request.Name}' already exists.");
-
-            // Create new user
-            var user = new Users
-            {
-                UserID = ID_Generator.User(),
-                Name = request.Name,
-                Role = Enum.Parse<UserRole>(request.Role, true),
-                CreatedAt = DateTime.UtcNow
-            };
-
-            // Hash and set password
-            user.PasswordHash = _hasher.HashPassword(user, request.Password);
-
-            // Add to database
-            _db.Users.Add(user);
-            await _db.SaveChangesAsync();
-
-            return new UserResponse
-            {
-                UserID = user.UserID,
-                Name = user.Name,
-                Role = user.Role.ToString(),
-                CreatedAt = user.CreatedAt
-            };
+            return users.Select(MapToResponse).ToList();
         }
 
         public async Task<UserResponse?> GetUserAsync(string userID)
         {
-            // Validation
             if (string.IsNullOrWhiteSpace(userID))
                 throw new ArgumentException("UserID is required.", nameof(userID));
 
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.UserID == userID);
+            var user = await _db.Users
+                .FirstOrDefaultAsync(u => u.UserID == userID);
 
             if (user == null)
                 return null;
 
-            return new UserResponse
-            {
-                UserID = user.UserID,
-                Name = user.Name,
-                Role = user.Role.ToString(),
-                CreatedAt = user.CreatedAt
-            };
+            return MapToResponse(user);
         }
 
-        public async Task<List<UserResponse>> GetAllUsersAsync()
+        public async Task<UserResponse> CreateUserAsync(CreateUserRequest request)
         {
-            var users = await _db.Users.ToListAsync();
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
 
-            return users.Select(u => new UserResponse
+            var username = GetRequestedUsername(request.Username, request.Name);
+            var password = request.Password?.Trim() ?? string.Empty;
+            var role = ParseRole(request.Role);
+
+            if (string.IsNullOrWhiteSpace(username))
+                throw new ArgumentException("Username is required.");
+
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Password is required.");
+
+            var existingUser = await _db.Users
+                .FirstOrDefaultAsync(u => u.Name.ToLower() == username.ToLower());
+
+            if (existingUser != null)
+                throw new InvalidOperationException($"A user with the name '{username}' already exists.");
+
+            var user = new Users
             {
-                UserID = u.UserID,
-                Name = u.Name,
-                Role = u.Role.ToString(),
-                CreatedAt = u.CreatedAt
-            }).ToList();
+                UserID = ID_Generator.User(),
+                Name = username,
+                Role = role,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            user.PasswordHash = _hasher.HashPassword(user, password);
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            return MapToResponse(user);
         }
 
         public async Task<UserResponse?> UpdateUserAsync(string userID, UpdateUserRequest request)
         {
-            // Validation
             if (string.IsNullOrWhiteSpace(userID))
                 throw new ArgumentException("UserID is required.", nameof(userID));
+
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            if (string.IsNullOrWhiteSpace(request.Name) && string.IsNullOrWhiteSpace(request.Role) && request.Password == null)
-                throw new ArgumentException("At least one field must be provided for update.");
 
-            // Get user
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.UserID == userID);
+            var user = await _db.Users
+                .FirstOrDefaultAsync(u => u.UserID == userID);
+
             if (user == null)
                 return null;
 
-            // Check if new name already exists (if changing name)
-            if (!string.IsNullOrWhiteSpace(request.Name) && request.Name.ToLower() != user.Name.ToLower())
-            {
-                var nameExists = await _db.Users
-                    .AnyAsync(u => u.Name.ToLower() == request.Name.ToLower() && u.UserID != userID);
-                if (nameExists)
-                    throw new InvalidOperationException($"A user with the name '{request.Name}' already exists.");
+            var username = GetRequestedUsername(request.Username, request.Name);
 
-                user.Name = request.Name;
+            if (string.IsNullOrWhiteSpace(username))
+                throw new ArgumentException("Username is required.");
+
+            var newRole = ParseRole(request.Role);
+
+            var nameExists = await _db.Users
+                .AnyAsync(u =>
+                    u.UserID != userID &&
+                    u.Name.ToLower() == username.ToLower());
+
+            if (nameExists)
+                throw new InvalidOperationException($"A user with the name '{username}' already exists.");
+
+            if (user.Role == UserRole.Admin && newRole != UserRole.Admin)
+            {
+                var adminCount = await _db.Users
+                    .CountAsync(u => u.Role == UserRole.Admin);
+
+                if (adminCount <= 1)
+                    throw new InvalidOperationException("Cannot remove Admin role from the last admin user.");
             }
 
-            // Update role if provided
-            if (!string.IsNullOrWhiteSpace(request.Role))
-            {
-                user.Role = Enum.Parse<UserRole>(request.Role, true);
-            }
+            user.Name = username;
+            user.Role = newRole;
 
-            // Update password if provided
+            // Compatibility: if old UI sends password inside update, handle it.
+            // New UI should use /change-password instead.
             if (!string.IsNullOrWhiteSpace(request.Password))
             {
                 user.PasswordHash = _hasher.HashPassword(user, request.Password);
             }
 
-            // Save changes
             _db.Users.Update(user);
             await _db.SaveChangesAsync();
 
-            return new UserResponse
-            {
-                UserID = user.UserID,
-                Name = user.Name,
-                Role = user.Role.ToString(),
-                CreatedAt = user.CreatedAt
-            };
+            return MapToResponse(user);
+        }
+
+        public async Task<bool> ChangePasswordAsync(string userID, ChangePasswordRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(userID))
+                throw new ArgumentException("UserID is required.", nameof(userID));
+
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            var password = request.Password?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Password is required.");
+
+            var user = await _db.Users
+                .FirstOrDefaultAsync(u => u.UserID == userID);
+
+            if (user == null)
+                return false;
+
+            user.PasswordHash = _hasher.HashPassword(user, password);
+
+            _db.Users.Update(user);
+            await _db.SaveChangesAsync();
+
+            return true;
         }
 
         public async Task<bool> DeleteUserAsync(string userID)
         {
-            // Validation
             if (string.IsNullOrWhiteSpace(userID))
                 throw new ArgumentException("UserID is required.", nameof(userID));
 
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.UserID == userID);
+            var user = await _db.Users
+                .FirstOrDefaultAsync(u => u.UserID == userID);
+
             if (user == null)
                 return false;
+
+            if (user.Role == UserRole.Admin)
+            {
+                var adminCount = await _db.Users
+                    .CountAsync(u => u.Role == UserRole.Admin);
+
+                if (adminCount <= 1)
+                    throw new InvalidOperationException("Cannot delete the last admin user.");
+            }
 
             _db.Users.Remove(user);
             await _db.SaveChangesAsync();
 
             return true;
+        }
+
+        private static UserResponse MapToResponse(Users user)
+        {
+            return new UserResponse
+            {
+                UserID = user.UserID,
+                Username = user.Name,
+                Name = user.Name,
+                Role = user.Role.ToString(),
+                IsActive = true,
+                CreatedAt = user.CreatedAt
+            };
+        }
+
+        private static string GetRequestedUsername(string username, string name)
+        {
+            if (!string.IsNullOrWhiteSpace(username))
+                return username.Trim();
+
+            if (!string.IsNullOrWhiteSpace(name))
+                return name.Trim();
+
+            return string.Empty;
+        }
+
+        private static UserRole ParseRole(string? roleText)
+        {
+            if (string.IsNullOrWhiteSpace(roleText))
+                return UserRole.User;
+
+            if (!Enum.TryParse<UserRole>(roleText, ignoreCase: true, out var role))
+                throw new ArgumentException($"Invalid role '{roleText}'. Allowed roles are User and Admin.");
+
+            if (role != UserRole.User && role != UserRole.Admin)
+                throw new ArgumentException($"Invalid role '{roleText}'. Allowed roles are User and Admin.");
+
+            return role;
         }
     }
 }

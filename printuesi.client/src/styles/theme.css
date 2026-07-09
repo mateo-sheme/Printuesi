@@ -1294,6 +1294,8 @@ textarea {
 
 
 
+
+
 /* ---------- Print Job table safety ---------- */
 
 .job-detail-panel .table-responsive {
@@ -1304,6 +1306,109 @@ textarea {
     min-width: 850px;
 }
 /* ---------- Responsive ---------- */
+
+.users-layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.45fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.users-list-panel,
+.users-editor-panel {
+    min-width: 0;
+}
+
+.users-search-box {
+    max-width: 280px;
+}
+
+.users-card-list {
+    display: grid;
+    gap: 12px;
+}
+
+.user-list-card {
+    appearance: none;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    color: var(--text);
+    border-radius: 18px;
+    padding: 14px;
+    text-align: left;
+    display: grid;
+    gap: 10px;
+    box-shadow: var(--soft-shadow);
+    transition: 0.18s ease;
+}
+
+    .user-list-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(99, 102, 241, 0.45);
+    }
+
+    .user-list-card.selected {
+        border-color: #7c6dff;
+        box-shadow: 0 0 0 3px rgba(124, 109, 255, 0.2);
+    }
+
+    .user-list-card strong {
+        display: block;
+        font-weight: 900;
+    }
+
+    .user-list-card small {
+        display: block;
+        color: var(--muted);
+        margin-top: 3px;
+        word-break: break-word;
+    }
+
+.user-card-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.user-form {
+    display: grid;
+    gap: 14px;
+}
+
+.user-form-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.user-password-box {
+    display: grid;
+    gap: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 18px;
+}
+
+    .user-password-box h6 {
+        font-weight: 900;
+        margin: 0;
+    }
+
+@media (max-width: 991.98px) {
+    .users-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .users-search-box {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .user-form-actions .btn {
+        width: 100%;
+    }
+}
 
 @media (max-width: 1199.98px) {
     .jobs-layout {
